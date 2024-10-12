@@ -165,7 +165,7 @@ def get_data(full: str, domain: str):
     stripped = full.rstrip('.')  # remove trailing dot
     print(f"Stripped = {stripped}")
     print(f"Domain = {domain}")
-    if not (stripped == domain or stripped.endswith("." + domain)):
+    if not (stripped.lower() == domain.lower() or stripped.lower().endswith("." + domain.lower())):
         print("Messed up domain")
         raise ShortCircuitException()
     if stripped.count('.') != (domain.count('.') + 4):
