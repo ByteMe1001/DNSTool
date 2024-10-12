@@ -93,6 +93,7 @@ class DataParserManager():
         
         # Makes sure there is only 2 "." in data
         if data.count('.') != 2:
+            print("Dot exceed LOL")
             raise DNSSyntaxException()
         
         connection_id = int(data[data.index('.') + 1:data.rindex('.')])
@@ -102,6 +103,7 @@ class DataParserManager():
         # Gets the substring after the last "."
         hex = data[data.rindex('.') + 1:]
         if len(hex) % 2 == 1:
+            print("odd length")
             raise DNSSyntaxException()
         packet_number = int(data[:data.index('.')])
         parser: DataParser = self.parsers[connection_id - 1]
@@ -163,9 +165,11 @@ def get_domain_from_full(full: str):
 # throws unrelated exception if the data is unrelated to the logger
 def get_data(full: str, domain: str):
     stripped = full.rstrip('.')  # remove trailing dot
+    domain = domain.lower()
+    stripped = stripped.lower()
     print(f"Stripped = {stripped}")
     print(f"Domain = {domain}")
-    if not (stripped.lower() == domain.lower() or stripped.lower().endswith("." + domain.lower())):
+    if not (stripped == domain or stripped.endswith("." + domain)):
         print("Messed up domain")
         raise ShortCircuitException()
     if stripped.count('.') != (domain.count('.') + 4):
