@@ -164,6 +164,7 @@ def get_domain_from_full(full: str):
 def get_data(full: str, domain: str):
     stripped = full.rstrip('.')  # remove trailing dot
     print(f"Stripped = {stripped}")
+    print(f"Domain = {domain}")
     if not (stripped == domain or stripped.endswith("." + domain)):
         print("Messed up domain")
         raise ShortCircuitException()
