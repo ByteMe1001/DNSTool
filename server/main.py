@@ -92,7 +92,7 @@ class DataParserManager():
     def parse(self, data: str):
         
         # Makes sure there is only 2 "." in data
-        if data.count('.') != 2:
+        if data.count('.') != 3:
             print("Dot exceed LOL")
             raise DNSSyntaxException()
         
