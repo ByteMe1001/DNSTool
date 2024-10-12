@@ -91,10 +91,13 @@ class DataParserManager():
 
     def parse(self, data: str):
         
+        # Removes the domain from the raw data
+        data = data.replace(DOMAIN, "").rstrip('.')
         print(data)
+
         # Makes sure there is only 2 "." in data
         if data.count('.') != 2:
-            # print("Dot exceed LOL")
+            print("Dot exceed LOL")
             raise DNSSyntaxException()
         
         connection_id = int(data[data.index('.') + 1:data.rindex('.')])
@@ -104,7 +107,7 @@ class DataParserManager():
         # Gets the substring after the last "."
         hex = data[data.rindex('.') + 1:]
         if len(hex) % 2 == 1:
-            # print("odd length")
+            print("odd length")
             raise DNSSyntaxException()
         packet_number = int(data[:data.index('.')])
         parser: DataParser = self.parsers[connection_id - 1]
