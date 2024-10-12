@@ -40,7 +40,7 @@ class NXConnectionException(Exception):
 class PacketsOutOfOrderException(Exception):
     pass
 
-# A means of concatonating data and displaying it.
+# A means of concatnating data and displaying it.
 class DataParser():
     def __init__(self, ip):
         self.last_received = -1
@@ -55,6 +55,7 @@ class DataParser():
     # raises PacketsOutOfOrderException if packet received is in wrong order
     def add(self, packet_number: int, data: bytes):
         if packet_number == self.last_received:  # repeated packet
+            print("Repeated packet")
             raise ShortCircuitException()
         if not (packet_number > self.last_received or packet_number == 0):
             self.last_received = 0
@@ -89,6 +90,8 @@ class DataParserManager():
         self.parsers.append(parser)
 
     def parse(self, data: str):
+        
+        # Makes sure there is only 2 "." in data
         if data.count('.') != 2:
             raise DNSSyntaxException()
         
@@ -96,6 +99,7 @@ class DataParserManager():
         if connection_id > len(self.parsers):
             raise NXConnectionException()
         
+        # Gets the substring after the last "."
         hex = data[data.rindex('.') + 1:]
         if len(hex) % 2 == 1:
             raise DNSSyntaxException()
@@ -160,6 +164,7 @@ def get_domain_from_full(full: str):
 def get_data(full: str, domain: str):
     stripped = full.rstrip('.')  # remove trailing dot
     if not (stripped == domain or stripped.endswith("." + domain)):
+        print("Messed up domain")
         raise ShortCircuitException()
     if stripped.count('.') != (domain.count('.') + 4):
         raise UnrelatedException()
