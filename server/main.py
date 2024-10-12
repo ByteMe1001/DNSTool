@@ -163,6 +163,7 @@ def get_domain_from_full(full: str):
 # throws unrelated exception if the data is unrelated to the logger
 def get_data(full: str, domain: str):
     stripped = full.rstrip('.')  # remove trailing dot
+    print("Stripped = f{stripped}")
     if not (stripped == domain or stripped.endswith("." + domain)):
         print("Messed up domain")
         raise ShortCircuitException()
