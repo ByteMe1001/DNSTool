@@ -91,8 +91,8 @@ class DataParserManager():
 
     def parse(self, data: str):
         
-        # Removes the domain from the raw data
-        data = data.replace(DOMAIN, "").rstrip('.')
+        # Only takes everything before the third "."
+        data = ".".join(data.split(".")[:3])
         print(data)
 
         # Makes sure there is only 2 "." in data
@@ -169,10 +169,13 @@ def get_domain_from_full(full: str):
 # throws unrelated exception if the data is unrelated to the logger
 def get_data(full: str, domain: str):
     stripped = full.rstrip('.')  # remove trailing dot
+    
+    # Convert to lower case because the capitalisation is wonky over DNS
     domain = domain.lower()
     stripped = stripped.lower()
     print(f"Stripped = {stripped}")
     print(f"Domain = {domain}")
+    
     if not (stripped == domain or stripped.endswith("." + domain)):
         print("Messed up domain")
         raise ShortCircuitException()
