@@ -62,8 +62,9 @@ def forge_dns_response(pkt, rdata="", rcode=0):
 # DNS Packet handler that processes queries and encrypts/decrypts data
 def handle_dns_packet(packet):
     if packet.haslayer(DNS) and packet[DNS].opcode == 0:  # DNS query
-        domain = packet[DNSQR].qname.decode()
-
+        domain = packet[DNSQR].qname.decode().lower()
+        print(f"Domain received: {domain}")
+        
         if DOMAIN in domain:
             # Extract and decrypt the data
             encrypted_data = domain.replace(f".{DOMAIN}.", "")
