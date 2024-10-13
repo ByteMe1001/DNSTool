@@ -92,7 +92,9 @@ def forge_dns_response(pkt, rdata="", rcode=0):
 # DNS Packet handler for processing client queries
 def handle_dns_packet(packet):
     if packet.haslayer(DNS) and packet[DNS].opcode == 0:  # DNS query
-        print(f"packet: {packet}")
+        print("This is packet:")
+        packet.show()
+
         domain = packet[DNSQR].qname.decode().lower()
         
         print(f"domain: {domain}")
