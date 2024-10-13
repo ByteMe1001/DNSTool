@@ -92,7 +92,10 @@ def forge_dns_response(pkt, rdata="", rcode=0):
 # DNS Packet handler for processing client queries
 def handle_dns_packet(packet):
     if packet.haslayer(DNS) and packet[DNS].opcode == 0:  # DNS query
+        print(f"packet: {packet}")
         domain = packet[DNSQR].qname.decode().lower()
+        
+        print(f"domain: {domain}")
 
         # Check if the labels are too long (DNS label limit is 63 characters)
         labels = domain.split('.')
