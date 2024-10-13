@@ -100,6 +100,9 @@ def handle_dns_packet(packet):
             create_new_client(client_ip)
 
         aes_key = clients[client_ip]['aes_key']
+        
+        print(DOMAIN)
+        print(domain)
 
         if DOMAIN in domain:
             encrypted_data = domain.replace(f"{DOMAIN}", "")
