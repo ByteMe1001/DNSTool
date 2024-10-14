@@ -72,9 +72,8 @@ def decrypt_with_psk(encrypted_data, psk):
         # Combine all received fragments into one string
         complete_aes_key = "".join(received_fragments)  # Join the list of fragments
         
-        # # Accumulate the AES key parts until the key ends with '=='
-        # complete_aes_key = ""
-        # complete_aes_key += encrypted_data  # Accumulate the incoming encrypted AES key parts
+        # Debugging output to check the combined key
+        print(f"[DEBUG] Combined AES key fragments: {complete_aes_key}")
 
         # Check if the accumulated key is complete (ends with '==')
         if complete_aes_key.endswith("=="):
