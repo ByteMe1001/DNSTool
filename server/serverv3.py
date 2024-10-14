@@ -51,22 +51,18 @@ class PacketsOutOfOrderException(Exception):
 psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
 
 
-# Initialize received_fragments as a dictionary to map IP addresses to their fragments
-received_fragments = {}
+# Initialize received_fragments as a list to maintain order
+received_fragments = []
 
 # AES decryption for the key exchange (PSK-based)
-def decrypt_with_psk(encrypted_data, psk, ip):
+def decrypt_with_psk(encrypted_data, psk):
     global received_fragments
-    
-    # Initialize the fragment list for the IP if it doesn't exist
-    if ip not in received_fragments:
-        received_fragments[ip] = []
 
-    if encrypted_data in received_fragments[ip]:
+    if encrypted_data in received_fragments:
         return None, False  # Skip duplicate fragments
 
-    received_fragments[ip].append(encrypted_data)
-    complete_aes_key = "".join(received_fragments[ip])
+    received_fragments.append(encrypted_data)
+    complete_aes_key = "".join(received_fragments)
 
     # Add base64 padding if necessary
     missing_padding = len(complete_aes_key) % 4
@@ -213,7 +209,7 @@ def handle_query(pkt, domain, data_parsers):
     # Print detailed packet information
     print(f"Full query received: {pkt[DNSQR].qname.decode()}")
     
-    # pkt.show()  # This will print detailed packet information
+    pkt.show()  # This will print detailed packet information
 
     qname = pkt[DNSQR].qname.decode()
 
@@ -227,7 +223,7 @@ def handle_query(pkt, domain, data_parsers):
     if data:
         # Step 1: If the client doesn't have an AES key yet, decrypt it with the PSK
         if pkt[IP].src not in clients:
-            aes_key, completed_key = decrypt_with_psk(data, psk, pkt[IP].src)
+            aes_key, completed_key = decrypt_with_psk(data, psk)
             
             # To check if the full key is received (ends with "==")
             if completed_key == True: 
