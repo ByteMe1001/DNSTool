@@ -90,7 +90,7 @@ def decrypt_with_psk(encrypted_data, psk):
             
             cipher = AES.new(psk, AES.MODE_CBC, iv)
             decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
-            print(f"[SERVER] Decrypted AES Key: {unpadded_key}")
+            print(f"[SERVER] Decrypted AES Key: {decrypted_aes_key}")
             return decrypted_aes_key, True
         else:
             print(f"[SERVER] Partial AES key received, waiting for more fragments. Current length: {len(complete_aes_key)}")
@@ -261,7 +261,7 @@ def create_response(ip, pkt):
 
 # Extract data from the DNS query
 def get_data(full: str, domain: str):
-    stripped = full.rstrip('.').lower()
+    stripped = full.rstrip('.').lower
     domain = domain.lower()
 
     # Ensure the domain is correctly part of the query
@@ -269,7 +269,12 @@ def get_data(full: str, domain: str):
         raise ShortCircuitException()
 
     # Extract the data part (everything before the domain)
-    data = stripped.replace("." + domain, "")
+    # data = stripped.replace("." + domain, "")
+    
+    # TODO: Abit weird
+    # Extract the data part (everything before the first '.')
+    data = stripped.split('.')[0]  # Get the first part before the first period
+
     return data
 
 
