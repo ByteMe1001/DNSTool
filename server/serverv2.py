@@ -62,7 +62,7 @@ def decrypt_with_psk(encrypted_data, psk):
         # Check if the incoming fragment has already been processed
         if encrypted_data in received_fragments:
             print(f"[SERVER] Duplicate AES key fragment received: {encrypted_data}")
-            return None  # Skip processing this fragment
+            return None, False  # Skip processing this fragment
         
         
         # Add the incoming fragment to the set of received fragments
@@ -85,14 +85,14 @@ def decrypt_with_psk(encrypted_data, psk):
             cipher = AES.new(psk, AES.MODE_CBC, iv)
             decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
             print(f"[SERVER] Decrypted AES Key: {decrypted_aes_key}")
-            return decrypted_aes_key
+            return decrypted_aes_key, True
         else:
             print(f"[SERVER] Partial AES key received, waiting for more fragments. Current length: {len(complete_aes_key)}")
-            return None  # Waiting for more fragments
+            return None, False  # Waiting for more fragments
 
     except Exception as e:
         print(f"[SERVER] AES key decryption error: {e}")
-        return None
+        return None, False
 
 
 def decode_base64_with_padding(data):
@@ -219,14 +219,18 @@ def handle_query(pkt, domain, data_parsers):
     # Try to extract the data from the query
     data = get_data(qname, domain)
     print(f"[SERVER] Extracted data: {data}")
+    
+
+    completed_key = False
 
     if data:
         # Step 1: If the client doesn't have an AES key yet, decrypt it with the PSK
         if pkt[IP].src not in clients:
-            aes_key = decrypt_with_psk(data, psk)
-            clients[pkt[IP].src] = {'aes_key': aes_key, 'parser': DataParser(pkt[IP].src)}
-            data_parsers.add_parser(clients[pkt[IP].src]['parser'])
-            print(f"[SERVER] Decrypted AES Key for {pkt[IP].src}")
+            aes_key, completed_key = decrypt_with_psk(data, psk)
+            if completed_key == True: 
+                clients[pkt[IP].src] = {'aes_key': aes_key, 'parser': DataParser(pkt[IP].src)}
+                data_parsers.add_parser(clients[pkt[IP].src]['parser'])
+                print(f"[SERVER] Decrypted AES Key for {pkt[IP].src}")
         else:
             # Step 2: If AES key is already available, proceed with normal decryption
             aes_key = clients[pkt[IP].src]['aes_key']
