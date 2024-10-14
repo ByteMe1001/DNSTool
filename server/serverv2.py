@@ -89,9 +89,7 @@ def decrypt_with_psk(encrypted_data, psk):
             #     return None, False
             
             cipher = AES.new(psk, AES.MODE_CBC, iv)
-            decrypted_aes_key = cipher.decrypt(encrypted_aes_key)
             decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
-            unpadded_key = unpad(decrypted_aes_key, AES.block_size)
             print(f"[SERVER] Decrypted AES Key: {unpadded_key}")
             return decrypted_aes_key, True
         else:
