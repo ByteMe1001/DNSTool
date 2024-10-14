@@ -127,10 +127,10 @@ if __name__ == "__main__":
 
     # Step 3: Send the encrypted AES key as a DNS query
     encrypted_aes_key_fragments = fragment_message(encrypted_aes_key)
-    # for fragment in encrypted_aes_key_fragments:
-    #     query_pkt = craft_dns_query(fragment, DOMAIN, 'TXT')
-    #     print(f"[CLIENT] Sending AES key fragment: {fragment}")
-    #     response = send_dns_query(DNS_SERVER_IP, query_pkt)
+    for fragment in encrypted_aes_key_fragments:
+        query_pkt = craft_dns_query(fragment, DOMAIN, 'TXT')
+        print(f"[CLIENT] Sending AES key fragment: {fragment}")
+        response = send_dns_query(DNS_SERVER_IP, query_pkt)
 
     # Step 4: Encrypt the actual message using the AES key
     encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)
@@ -140,8 +140,8 @@ if __name__ == "__main__":
     
     decrypted_message = decrypt_aes(encrypted_message, aes_key)
     print(f"This is decrypted: {decrypted_message}")
-    # fragments = fragment_message(encrypted_message)
-    # for fragment in fragments:
-    #     query_pkt = craft_dns_query(fragment, DOMAIN, query_type)
-    #     print(f"[CLIENT] Sending message fragment: {fragment}")
-    #     response = send_dns_query(DNS_SERVER_IP, query_pkt)
+    fragments = fragment_message(encrypted_message)
+    for fragment in fragments:
+        query_pkt = craft_dns_query(fragment, DOMAIN, query_type)
+        print(f"[CLIENT] Sending message fragment: {fragment}")
+        response = send_dns_query(DNS_SERVER_IP, query_pkt)

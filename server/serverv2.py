@@ -54,17 +54,29 @@ psk = b"mysecurepre-sharedkey123456789012"  # Must match the client's PSK
 # AES decryption for the key exchange (PSK-based)
 def decrypt_with_psk(encrypted_data, psk):
     try:
-        print(f"[SERVER] Encrypted data (base64) for AES key decryption: {encrypted_data}")
-        data = base64.b64decode(encrypted_data)
-        iv = data[:16]  # Extract the IV (first 16 bytes)
-        encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-        cipher = AES.new(psk, AES.MODE_CBC, iv)
-        decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
-        print(f"[SERVER] Decrypted AES Key: {decrypted_aes_key}")
-        return decrypted_aes_key
+        # Accumulate the AES key parts until the key ends with '=='
+        complete_aes_key = ""
+        complete_aes_key += encrypted_data  # Accumulate the incoming encrypted AES key parts
+
+        # Check if the accumulated key is complete (ends with '==')
+        if complete_aes_key.endswith("=="):
+            print(f"[SERVER] Full AES key (base64) received: {complete_aes_key}")
+
+            data = base64.b64decode(complete_aes_key)
+            iv = data[:16]  # Extract the IV (first 16 bytes)
+            encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
+            cipher = AES.new(psk, AES.MODE_CBC, iv)
+            decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
+            print(f"[SERVER] Decrypted AES Key: {decrypted_aes_key}")
+            return decrypted_aes_key
+        else:
+            print(f"[SERVER] Partial AES key received, waiting for more fragments. Current length: {len(complete_aes_key)}")
+            return None  # Waiting for more fragments
+
     except Exception as e:
         print(f"[SERVER] AES key decryption error: {e}")
         return None
+
 
 def decode_base64_with_padding(data):
     # Add padding if necessary
