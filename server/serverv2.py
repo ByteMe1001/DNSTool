@@ -73,23 +73,24 @@ def decrypt_with_psk(encrypted_data, psk):
         complete_aes_key = "".join(received_fragments)  # Join the list of fragments
         
         # Debugging output to check the combined key
-        print(f"[DEBUG] Combined AES key fragments: {complete_aes_key}")
+        print(f"[DEBUG] Combined AES key fragments: .{complete_aes_key}.")
 
         # Check if the accumulated key is complete (ends with '==')
         if complete_aes_key.endswith("=="):
             print(f"[SERVER] Full AES key (base64) received: {complete_aes_key}")
 
             data = base64.b64decode(complete_aes_key)
+            print(f"This is after base64: {data}")
             iv = data[:16]  # Extract the IV (first 16 bytes)
             encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
             # Ensure the length of the encrypted key is valid
             # if len(encrypted_aes_key) not in {16, 24, 32}:  # Valid lengths for AES keys
-            #     print(f"[SERVER] Invalid encrypted AES key length: {len(encrypted_aes_key)}")
+            print(f"[SERVER] Invalid encrypted AES key length: {len(encrypted_aes_key)}")
             #     return None, False
             
             cipher = AES.new(psk, AES.MODE_CBC, iv)
             decrypted_aes_key = cipher.decrypt(encrypted_aes_key)
-            # decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
+            decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
             unpadded_key = unpad(decrypted_aes_key, AES.block_size)
             print(f"[SERVER] Decrypted AES Key: {unpadded_key}")
             return decrypted_aes_key, True
