@@ -78,14 +78,9 @@ def decrypt_with_psk(encrypted_data, psk, ip):
         if complete_aes_key.endswith("=="):
             data = base64.b64decode(complete_aes_key)
             iv = data[:16]  # First 16 bytes are IV
-            print(f"[SERVER] iv: {iv}")
             encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-            print(f"[SERVER] encryped AES aft b64: {encrypted_aes_key}")
-            print(f"[SERVER] Encrypted AES key length: {len(encrypted_aes_key)}")
-            
             cipher = AES.new(psk, AES.MODE_CBC, iv)
             decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
-            print(f"[CLIENT] Decrypted AES Key: {decrypted_aes_key}")
             return decrypted_aes_key, True
         else:
             print("[SERVER] Waiting for more fragments")
