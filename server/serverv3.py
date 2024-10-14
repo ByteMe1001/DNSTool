@@ -48,7 +48,7 @@ class PacketsOutOfOrderException(Exception):
 
 
 # Pre-shared key (PSK) for exchanging the AES key securely
-psk = b"mysecurepre-sharedkey123456789012"  # Must match the client's PSK
+psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
 
 
 # Initialize received_fragments as a list to maintain order
@@ -76,7 +76,7 @@ def decrypt_with_psk(encrypted_data, psk):
             iv = data[:16]  # First 16 bytes are IV
             print(f"[SERVER] iv: {iv}")
             encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-            print(f"[SERVER] iv: {encrypted_aes_key}")
+            print(f"[SERVER] encryped AES aft b64: {encrypted_aes_key}")
             print(f"[SERVER] Encrypted AES key length: {len(encrypted_aes_key)}")
             
             cipher = AES.new(psk, AES.MODE_CBC, iv)
