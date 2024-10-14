@@ -51,18 +51,22 @@ class PacketsOutOfOrderException(Exception):
 psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
 
 
-# Initialize received_fragments as a list to maintain order
-received_fragments = []
+# Initialize received_fragments as a dictionary to map IP addresses to their fragments
+received_fragments = {}
 
 # AES decryption for the key exchange (PSK-based)
-def decrypt_with_psk(encrypted_data, psk):
+def decrypt_with_psk(encrypted_data, psk, ip):
     global received_fragments
+    
+    # Initialize the fragment list for the IP if it doesn't exist
+    if ip not in received_fragments:
+        received_fragments[ip] = []
 
-    if encrypted_data in received_fragments:
+    if encrypted_data in received_fragments[ip]:
         return None, False  # Skip duplicate fragments
 
-    received_fragments.append(encrypted_data)
-    complete_aes_key = "".join(received_fragments)
+    received_fragments[ip].append(encrypted_data)
+    complete_aes_key = "".join(received_fragments[ip])
 
     # Add base64 padding if necessary
     missing_padding = len(complete_aes_key) % 4
@@ -152,7 +156,7 @@ class DataParser:
             os.makedirs(path, exist_ok=True)
             file_path = f'{path}/{id}-{self.ip}-{int(time.time())}.log'
             with open(file_path, 'x', encoding='ascii') as file:
-                file.write(self.data.decode('ascii'))
+                file.write(self.data.decode('ascii') + '\n')  # Append a newline character
         except Exception as e:
             print(f"Error saving data: {e}")
 
@@ -202,13 +206,14 @@ class DataParserManager:
         os.makedirs(save_path, exist_ok=True)
         for i, parser in enumerate(self.parsers):
             parser.save_to_disk(save_path, i + 1)
-
+        
 
 # Helper function to handle DNS queries
 def handle_query(pkt, domain, data_parsers):
     # Print detailed packet information
     print(f"Full query received: {pkt[DNSQR].qname.decode()}")
-    pkt.show()  # This will print detailed packet information
+    
+    # pkt.show()  # This will print detailed packet information
 
     qname = pkt[DNSQR].qname.decode()
 
@@ -216,13 +221,15 @@ def handle_query(pkt, domain, data_parsers):
     data = get_data(qname, domain)
     print(f"[SERVER] Extracted data: {data}")
     
-
+    # Boolean Value to track key fragments
     completed_key = False
 
     if data:
         # Step 1: If the client doesn't have an AES key yet, decrypt it with the PSK
         if pkt[IP].src not in clients:
-            aes_key, completed_key = decrypt_with_psk(data, psk)
+            aes_key, completed_key = decrypt_with_psk(data, psk, pkt[IP].src)
+            
+            # To check if the full key is received (ends with "==")
             if completed_key == True: 
                 clients[pkt[IP].src] = {'aes_key': aes_key, 'parser': DataParser(pkt[IP].src)}
                 data_parsers.add_parser(clients[pkt[IP].src]['parser'])
@@ -257,9 +264,6 @@ def get_data(full: str, domain: str):
     # Ensure the domain is correctly part of the query
     if not stripped.endswith("." + domain):
         raise ShortCircuitException()
-
-    # Extract the data part (everything before the domain)
-    # data = stripped.replace("." + domain, "")
     
     data = full.split('.')[0]  # Get the first part before the first "."
     

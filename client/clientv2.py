@@ -81,15 +81,9 @@ def decrypt_with_psk(encrypted_data, psk):
     try:
         print(f"[CLIENT] Encrypted data (base64) for AES key decryption: {encrypted_data}")
         data = base64.b64decode(encrypted_data)
-        print(f"[CLIENT] Encrypted data (after base64) for AES key decryption: {data}")
-        
         iv = data[:16]  # Extract the IV (first 16 bytes)
-        print(f"[CLIENT] iv: {iv}")
         encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-        print(f"[CLIENT] Encrypted AES (After base64 and split): {encrypted_aes_key}")
-        
         cipher = AES.new(psk, AES.MODE_CBC, iv)
-        print(f"[CLIENT] Cipher: {cipher}")
         decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
         print(f"[CLIENT] Decrypted AES Key: {decrypted_aes_key}")
         return decrypted_aes_key
@@ -126,10 +120,8 @@ if __name__ == "__main__":
     aes_key = get_random_bytes(32)  # 32 bytes for AES-256
     aes_iv = get_random_bytes(16)
 
-    print(f"This is the og key: {aes_key}")
     # Step 2: Encrypt the AES key using the PSK
     encrypted_aes_key = encrypt_with_psk(aes_key, psk, aes_iv)
-    print(f"[CLIENT] Encrypted AES Key: {encrypted_aes_key}")
 
     # Step 3: Send the encrypted AES key as a DNS query
     encrypted_aes_key_fragments = fragment_message(encrypted_aes_key)
@@ -141,12 +133,16 @@ if __name__ == "__main__":
     # Step 4: Encrypt the actual message using the AES key
     encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)
     
-    decrypted_aes_key = decrypt_with_psk(encrypted_aes_key, psk)
+    # # For testing
+    # decrypted_aes_key = decrypt_with_psk(encrypted_aes_key, psk)
+    # decrypted_message = decrypt_aes(encrypted_message, aes_key)
+    # print(f"This is decrypted: {decrypted_message}")
     
-    decrypted_message = decrypt_aes(encrypted_message, aes_key)
-    print(f"This is decrypted: {decrypted_message}")
     fragments = fragment_message(encrypted_message)
     for fragment in fragments:
         query_pkt = craft_dns_query(fragment, DOMAIN, query_type)
         print(f"[CLIENT] Sending message fragment: {fragment}")
         response = send_dns_query(DNS_SERVER_IP, query_pkt)
+    
+    print("All Messages Sent")    
+        
