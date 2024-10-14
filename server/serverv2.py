@@ -82,9 +82,10 @@ def decrypt_with_psk(encrypted_data, psk):
             data = base64.b64decode(complete_aes_key)
             print(f"This is after base64: {data}")
             iv = data[:16]  # Extract the IV (first 16 bytes)
+            print(f"[SERVER] iv: {iv}")
             encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-            # Ensure the length of the encrypted key is valid
-            # if len(encrypted_aes_key) not in {16, 24, 32}:  # Valid lengths for AES keys
+            print(f"[SERVER] iv: {encrypted_aes_key}")
+
             print(f"[SERVER] Invalid encrypted AES key length: {len(encrypted_aes_key)}")
             #     return None, False
             

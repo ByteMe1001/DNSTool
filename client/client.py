@@ -81,8 +81,13 @@ def decrypt_with_psk(encrypted_data, psk):
     try:
         print(f"[CLIENT] Encrypted data (base64) for AES key decryption: {encrypted_data}")
         data = base64.b64decode(encrypted_data)
+        print(f"[CLIENT] Encrypted data (after base64) for AES key decryption: {data}")
+        
         iv = data[:16]  # Extract the IV (first 16 bytes)
+        print(f"[SERVER] iv: {iv}")
         encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
+        print(f"[SERVER] Encrypted AES (After base64 and split): {encrypted_aes_key}")
+        
         cipher = AES.new(psk, AES.MODE_CBC, iv)
         decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
         print(f"[CLIENT] Decrypted AES Key: {decrypted_aes_key}")
@@ -136,7 +141,6 @@ if __name__ == "__main__":
     encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)
     
     decrypted_aes_key = decrypt_with_psk(encrypted_aes_key, psk)
-    print(f"This is decrypted AES key: {decrypted_aes_key}")
     
     decrypted_message = decrypt_aes(encrypted_message, aes_key)
     print(f"This is decrypted: {decrypted_message}")
