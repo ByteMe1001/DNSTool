@@ -271,7 +271,7 @@ def get_data(full: str, domain: str):
     # Extract the data part (everything before the domain)
     # data = stripped.replace("." + domain, "")
     
-    data = stripped.split('.')[0]  # Get the first part before the first "."
+    data = full.split('.')[0]  # Get the first part before the first "."
     
     return data
 
