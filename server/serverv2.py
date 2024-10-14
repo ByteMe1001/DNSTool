@@ -261,7 +261,7 @@ def create_response(ip, pkt):
 
 # Extract data from the DNS query
 def get_data(full: str, domain: str):
-    stripped = full.rstrip('.').lower
+    stripped = full.rstrip('.').lower()
     domain = domain.lower()
 
     # Ensure the domain is correctly part of the query
@@ -271,10 +271,8 @@ def get_data(full: str, domain: str):
     # Extract the data part (everything before the domain)
     # data = stripped.replace("." + domain, "")
     
-    # TODO: Abit weird
-    # Extract the data part (everything before the first '.')
-    data = stripped.split('.')[0]  # Get the first part before the first period
-
+    data = stripped.split('.')[0]  # Get the first part before the first "."
+    
     return data
 
 
