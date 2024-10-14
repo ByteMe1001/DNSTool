@@ -50,8 +50,9 @@ class PacketsOutOfOrderException(Exception):
 # Pre-shared key (PSK) for exchanging the AES key securely
 psk = b"mysecurepre-sharedkey123456789012"  # Must match the client's PSK
 
-# Global variable to store unique fragments of the AES key
-received_fragments = set()  # To store unique fragments of the AES key
+
+# Initialize received_fragments as a list to maintain order
+received_fragments = []
 
 # AES decryption for the key exchange (PSK-based)
 def decrypt_with_psk(encrypted_data, psk):
@@ -65,11 +66,11 @@ def decrypt_with_psk(encrypted_data, psk):
             return None, False  # Skip processing this fragment
         
         
-        # Add the incoming fragment to the set of received fragments
-        received_fragments.add(encrypted_data)
+        # Add the incoming fragment to the list of received fragments
+        received_fragments.append(encrypted_data)
 
-        # Accumulate the AES key parts until the key ends with '=='
-        complete_aes_key = "".join(received_fragments)  # Combine all unique fragments
+        # Combine all received fragments into one string
+        complete_aes_key = "".join(received_fragments)  # Join the list of fragments
         
         # # Accumulate the AES key parts until the key ends with '=='
         # complete_aes_key = ""
