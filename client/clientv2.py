@@ -84,9 +84,9 @@ def decrypt_with_psk(encrypted_data, psk):
         print(f"[CLIENT] Encrypted data (after base64) for AES key decryption: {data}")
         
         iv = data[:16]  # Extract the IV (first 16 bytes)
-        print(f"[SERVER] iv: {iv}")
+        print(f"[CLIENT] iv: {iv}")
         encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-        print(f"[SERVER] Encrypted AES (After base64 and split): {encrypted_aes_key}")
+        print(f"[CLIENT] Encrypted AES (After base64 and split): {encrypted_aes_key}")
         
         cipher = AES.new(psk, AES.MODE_CBC, iv)
         decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
