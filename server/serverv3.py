@@ -81,6 +81,7 @@ def decrypt_with_psk(encrypted_data, psk):
             
             cipher = AES.new(psk, AES.MODE_CBC, iv)
             decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
+            print(f"[CLIENT] Decrypted AES Key: {decrypted_aes_key}")
             return decrypted_aes_key, True
         else:
             print("[SERVER] Waiting for more fragments")
