@@ -82,11 +82,16 @@ def decrypt_with_psk(encrypted_data, psk):
             data = base64.b64decode(complete_aes_key)
             iv = data[:16]  # Extract the IV (first 16 bytes)
             encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-            print(f"Encyprted Key: {encrypted_aes_key}")
-            print(len(encrypted_aes_key))
+            # Ensure the length of the encrypted key is valid
+            # if len(encrypted_aes_key) not in {16, 24, 32}:  # Valid lengths for AES keys
+            #     print(f"[SERVER] Invalid encrypted AES key length: {len(encrypted_aes_key)}")
+            #     return None, False
+            
             cipher = AES.new(psk, AES.MODE_CBC, iv)
-            decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
-            print(f"[SERVER] Decrypted AES Key: {decrypted_aes_key}")
+            decrypted_aes_key = cipher.decrypt(encrypted_aes_key)
+            # decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
+            unpadded_key = unpad(decrypted_aes_key, AES.block_size)
+            print(f"[SERVER] Decrypted AES Key: {unpadded_key}")
             return decrypted_aes_key, True
         else:
             print(f"[SERVER] Partial AES key received, waiting for more fragments. Current length: {len(complete_aes_key)}")
