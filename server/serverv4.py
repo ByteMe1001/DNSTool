@@ -30,6 +30,9 @@ received_fragments = {}
 
 class UnrelatedException(Exception):
     pass
+    
+class ShortCircuitException(Exception):
+    pass
 
 class NSQueryException(Exception):
     pass
