@@ -119,7 +119,10 @@ if __name__ == "__main__":
     full_domain_name = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz.sub.brightbuys.me"
 
     # Craft and send the DNS query
-    query_pkt = craft_dns_query(full_domain_name, 'TXT')
+    while(True):
+        query_pkt = craft_dns_query(full_domain_name, 'TXT')
+        print(f"[CLIENT] Sending DNS query for: {full_domain_name}")
+        
     print(f"[CLIENT] Sending DNS query for: {full_domain_name}")
     response = send_dns_query(DNS_SERVER_IP, query_pkt)
 
