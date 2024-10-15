@@ -59,6 +59,12 @@ def fragment_message(message, max_label_length=63):
     while message:
         fragments.append(message[:max_label_length])
         message = message[max_label_length:]
+
+    # Logging each fragment
+    print(f"[CLIENT] Total fragments created: {len(fragments)}")
+    for i, fragment in enumerate(fragments):
+        print(f"[CLIENT] Fragment {i + 1}: {fragment}")
+
     return fragments
 
 
@@ -69,13 +75,14 @@ def send_dns_query(server_ip, query_pkt, timeout=10):  # Increase timeout to 10 
         sock.settimeout(timeout)
         send(query_pkt)
         response, _ = sock.recvfrom(1024)
+        print(f"[CLIENT] Received response: {response}")
         return response
     except socket.timeout:
-        print("Request timed out")
+        print("[CLIENT] Request timed out")
     finally:
         sock.close()
-        
-        
+
+
 # AES decryption for the encrypted AES key
 def decrypt_with_psk(encrypted_data, psk):
     try:
@@ -90,6 +97,7 @@ def decrypt_with_psk(encrypted_data, psk):
     except Exception as e:
         print(f"[CLIENT] AES key decryption error: {e}")
         return None
+
 
 # Craft DNS query based on the query type (TXT, CNAME, or A)
 def craft_dns_query(fragment, domain, query_type='TXT'):
@@ -132,17 +140,11 @@ if __name__ == "__main__":
 
     # Step 4: Encrypt the actual message using the AES key
     encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)
-    
-    # # For testing
-    # decrypted_aes_key = decrypt_with_psk(encrypted_aes_key, psk)
-    # decrypted_message = decrypt_aes(encrypted_message, aes_key)
-    # print(f"This is decrypted: {decrypted_message}")
-    
+
     fragments = fragment_message(encrypted_message)
     for fragment in fragments:
         query_pkt = craft_dns_query(fragment, DOMAIN, query_type)
         print(f"[CLIENT] Sending message fragment: {fragment}")
         response = send_dns_query(DNS_SERVER_IP, query_pkt)
-    
-    print("All Messages Sent")    
-        
+
+    print("All Messages Sent")
