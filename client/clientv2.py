@@ -78,7 +78,7 @@ def send_dns_query(server_ip, query_pkt, timeout=10):  # Increase timeout to 10 
         print(f"[CLIENT] Received response: {response}")
         return response
     except socket.timeout:
-        print("[CLIENT] Request timed out")
+        pass
     finally:
         sock.close()
 
