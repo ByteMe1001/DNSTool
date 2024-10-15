@@ -270,11 +270,10 @@ stop_sniffing = threading.Event()  # Event to control sniffing stop
 
 # Starts a listener for DNS queries on port 53
 def start_listener(domain, data_parsers):
-    def check_stop(pkt):
-        if stop_sniffing.is_set():
-            return True  # Stop sniffing when the flag is set
-        handle_query(pkt, domain, data_parsers)
-        return False  # Continue sniffing
+   def check_stop(pkt):
+    if stop_sniffing.is_set():
+        return True  # Stop sniffing when the flag is set
+    handle_query(pkt, domain, data_parsers)
 
     sniff(filter="udp port 53", prn=check_stop, store=0, stop_filter=lambda x: stop_sniffing.is_set())
 
@@ -299,7 +298,9 @@ if __name__ == '__main__':
     finally:
         print("Stopping the DNS server...")
         stop_sniffing.set()  # Set the stop event for sniffing
+        print("Stop Sniffing stop")
         listener_thread.join()  # Wait for the sniffing thread to stop
+        print("Thread stopped")
         data_parsers.save_parsers("./logs")
         print("Goodbye.")
 
