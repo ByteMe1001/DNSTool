@@ -28,6 +28,23 @@ psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
 # Initialize received_fragments as a dictionary to map IP addresses to their fragments
 received_fragments = {}
 
+class UnrelatedException(Exception):
+    pass
+
+class NSQueryException(Exception):
+    pass
+
+class DNSSyntaxException(Exception):
+    pass
+
+class ServerMaxConnectionsException(Exception):
+    pass
+
+class NXConnectionException(Exception):
+    pass
+
+class PacketsOutOfOrderException(Exception):
+    pass
 
 # AES decryption for the key exchange (PSK-based)
 def decrypt_with_psk(encrypted_data, psk, ip):
