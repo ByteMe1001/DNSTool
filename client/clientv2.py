@@ -91,6 +91,7 @@ def decrypt_with_psk(encrypted_data, psk):
         print(f"[CLIENT] AES key decryption error: {e}")
         return None
 
+# TODO: FIX THE QUERY TYPE
 # Craft DNS query based on the query type (TXT, CNAME, or A)
 def craft_dns_query(fragment, domain, query_type='TXT'):
     if not fragment:
