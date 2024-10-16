@@ -7,6 +7,7 @@ from Crypto.Util.Padding import pad, unpad
 import base64
 import threading
 
+#########################################################    DATA DECLARATIONS    ################################################################
 
 # Enum for packet types used to categorize received and sent packets
 class ReceivedPacketTypes(Enum):
@@ -17,15 +18,15 @@ class ReceivedPacketTypes(Enum):
 class SentPacketTypes(Enum):
     OK = 200
     MALFORMED = 201
-    NX = 202  # non-existent
-    OOO = 203  # out of order
-    MAX = 204  # reached max connection
+    NX = 202    # non-existent
+    OOO = 203   # out of order
+    MAX = 204   # reached max connection
 
 
 # Pre-shared key (PSK) for exchanging the AES key securely
 psk = b"thisisaverysecurekey123456789012"  # Must match the client's PSK
 
-
+# Classes to catch exceptions
 class UnrelatedException(Exception):
     pass
     
@@ -53,41 +54,42 @@ received_fragments = {}
 # Initialize received_fragments as a dictionary to map IP addresses to their messages
 received_messages = {}
 
-# AES decryption for the key exchange (PSK-based)
-def decrypt_with_psk(encrypted_data, psk, ip):
-    global received_fragments
+#=================================================================== END OF DATA DECLARTIONS ==========================================================================
 
+#########################################################    AES ENCRYPTION AND DECRYPTION FUNCTIONS    ################################################################
+# AES decryption for the key exchange (PSK-based)
+def decrypt_with_psk(encrypted_data, psk, ip, packet_number):
+    global received_fragments
+    
     # Initialize the fragment list for the IP if it doesn't exist
     if ip not in received_fragments:
         received_fragments[ip] = []
+        
+    # Clear AES key fragments if a new key is received
+    if packet_number == -1:     # Check for -1 flag
+        print(f"[SERVER] New AES Key from {ip}.")
+        received_fragments[ip].clear()
 
+    # Check for duplicate key fragments
     if encrypted_data in received_fragments[ip]:
         print(f"[SERVER] Duplicate fragment from {ip}, ignoring.")
-        return None, False  # Skip duplicate fragments
+        return None, False      # Skip duplicate fragments
 
     # Append the new fragment
     received_fragments[ip].append(encrypted_data)
     complete_aes_key = "".join(received_fragments[ip])
 
-    # Add base64 padding if necessary
-    missing_padding = len(complete_aes_key) % 4
-    if missing_padding:
-        complete_aes_key += '=' * (4 - missing_padding)
-        
-    print(f"Data type of key = {type(complete_aes_key)}")
-    
     try:
         # Check if the key is complete (ends with ==)
         if complete_aes_key.endswith("=="):
             print(f"[SERVER] All fragments for {ip} received, attempting AES key decryption.")
-            print(f"[DEBUG] AES key decryption before decode: {complete_aes_key}")
-            print(f"[DEBUG] Data type of key = {type(complete_aes_key)}")
-            data = base64.b64decode(complete_aes_key)
-            print(f"[DEBUG] AES key decryption: {data}")
-            iv = data[:16]  # First 16 bytes are IV
-            encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
-            print(f"[DEBUG] IV Byte size: {len(iv)} bytes")
-            print(f"[DEBUG] Key Byte size: {len(encrypted_aes_key)} bytes")
+            # Add base64 padding if necessary
+            missing_padding = len(complete_aes_key) % 4
+            if missing_padding:
+                complete_aes_key += '=' * (4 - missing_padding)
+            data = base64.b64decode(complete_aes_key)   # Only decode when full frame is inside
+            iv = data[:16]                               # First 16 bytes are IV
+            encrypted_aes_key = data[16:]                # The rest is the encrypted AES key
             cipher = AES.new(psk, AES.MODE_CBC, iv)
             decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
             return decrypted_aes_key, True
@@ -109,7 +111,6 @@ def decode_base64_with_padding(data):
 
 
 def decrypt_aes(data, key, ip):
-    
     global received_messages
 
     # Initialize the fragment list for the IP if it doesn't exist
@@ -124,22 +125,26 @@ def decrypt_aes(data, key, ip):
     # Append the new fragment to the list
     received_messages[ip].append(data)
     complete_message = "".join(received_messages[ip])
-
+    
+    # Check if full Base64 message is received
     try:
         if complete_message.endswith("=") or complete_message.endswith("=="):
             print(f"[SERVER] Encrypted data (base64) for decryption: {complete_message}")
-            data = decode_base64_with_padding(complete_message)  # Use the padding fix function
+            data = decode_base64_with_padding(complete_message)     # Use the padding fix function
             iv = data[:16]
             encrypted_message = data[16:]
             cipher = AES.new(key, AES.MODE_CBC, iv)
             decrypted_data = unpad(cipher.decrypt(encrypted_message), AES.block_size)
             print(f"[SERVER] Decrypted message: {decrypted_data.decode('utf-8')}")
-            received_messages[ip].clear()  # Clear the fragments after successful decryption
+            received_messages[ip].clear()                           # Clear the fragments after successful decryption
             return decrypted_data.decode('utf-8')
     except Exception as e:
         print(f"[SERVER] Decryption error: {e}")
         return None
+#========================================================== END OF AES FUNCTIONS ===============================================================
 
+
+#########################################################    PARSING CLASSES    ################################################################
 
 # Class to handle the parsing of incoming data for a particular client
 class DataParser:
@@ -152,15 +157,18 @@ class DataParser:
         return len(self.data)
 
     def add(self, packet_number: int, data: bytes, key, ip):
+
+        # Check if duplicate packets are received
         if packet_number == self.last_received:
             print(f"Repeated packet {packet_number}:{self.last_received}")
-            # raise ShortCircuitException()  # Prevent duplicate processing
+            raise ShortCircuitException()       # Prevent duplicate processing
+        # Check if new packet is received or if new sequence
         if not (packet_number > self.last_received or packet_number == 0):
             self.last_received = 0
             raise PacketsOutOfOrderException()  # Packets arrived out of order
         try:
             decrypted_data = decrypt_aes(data.decode('ascii'), key, ip)
-            if decrypted_data != None:
+            if decrypted_data is not None:
                 self.data.extend(decrypted_data.encode('ascii'))  # Store decrypted data PROBLEMATIC IF DECRYPTED IS EMPTY
         except Exception as e:
             print(f"Unable to decode data packet: {e}")
@@ -180,6 +188,9 @@ class DataParser:
         except Exception as e:
             print(f"Error saving data: {e}")
 
+    # Reset last received packet number function
+    def reset_last_received(self):
+        self.last_received = 0
 
 # Manager class to handle multiple DataParsers
 class DataParserManager:
@@ -227,39 +238,71 @@ class DataParserManager:
         os.makedirs(save_path, exist_ok=True)
         for i, parser in enumerate(self.parsers):
             parser.save_to_disk(save_path, i + 1)
+            
+#================================================================== END OF PARSERS ============================================================================        
 
-
+#########################################################    SCAPY DNS SNIFFERS AND HANDLER    ################################################################
 # Helper function to handle DNS queries
 def handle_query(pkt, domain, data_parsers):
     # Ensure the packet contains a DNS query (DNSQR)
     if DNSQR in pkt:
         print(f"Full query received: {pkt[DNSQR].qname.decode()}")
-        pkt.show()  # This will print detailed packet information
 
         qname = pkt[DNSQR].qname.decode()
-        data = get_data(qname, domain)
-        print(f"[SERVER] Extracted data: {data}")
-        
-        print(f"Type of data: {type(data)}")
-        print(f"Contents of data: {data}")
+        raw_data = get_data(qname, domain)
+        pkt.show()  # This will print detailed packet information
+        print(f"[SERVER] Extracted data: {raw_data}")
 
         completed_key = False
+        
+        #  Split the data using :
+        parts = raw_data.split(':', 1)  # Split at the first dot
 
+        # Ensure there are enough parts to avoid IndexError
+        if len(parts) < 2:
+            print("[SERVER] Invalid data format received.")
+            return  # Exit or handle the error
+
+        #  Retrive data segments
+        try:
+            packet_number = parts[0]    # packet number
+            data = str(parts[1])        # actual data  
+            if packet_number == 'k':
+                packet_number = -1      # Assign a specific integer value for 'k'
+            elif packet_number == 'k2':
+                packet_number = -2    
+            elif packet_number != '':
+                packet_number = int(packet_number)  # Convert numeric strings to integers   
+        except ValueError:
+            print("[SERVER] Error parsing packet number. Ignoring.")
+            return  # Exit or handle the error
+        
         if data:
             # Step 1: If the client doesn't have an AES key yet, decrypt it with the PSK
             if pkt[IP].src not in clients:
-                aes_key, completed_key = decrypt_with_psk(data, psk, pkt[IP].src)
+                aes_key, completed_key = decrypt_with_psk(data, psk, pkt[IP].src, packet_number)
 
                 # Check if the full key is received
                 if completed_key:
                     clients[pkt[IP].src] = {'aes_key': aes_key, 'parser': DataParser(pkt[IP].src)}
                     data_parsers.add_parser(clients[pkt[IP].src]['parser'])
                     print(f"[SERVER] Decrypted AES Key for {pkt[IP].src}")
+                    
+            # Alternative Step: If key is received again        
+            elif packet_number == -1 or packet_number == -2:
+                print(f"[SERVER] New AES Key Fragment for {pkt[IP].src}")
+                parser = clients[pkt[IP].src]['parser']
+                parser.reset_last_received()
+                aes_key, completed_key = decrypt_with_psk(data, psk, pkt[IP].src, packet_number)
+                if completed_key:
+                    clients[pkt[IP].src]['aes_key'] = aes_key
+                    print(f"[SERVER] Decrypted new AES Key for {pkt[IP].src}")
+        
+            # Step 2: If AES key is already available, proceed with normal decryption
             else:
-                # Step 2: If AES key is already available, proceed with normal decryption
                 aes_key = clients[pkt[IP].src]['aes_key']
                 parser = clients[pkt[IP].src]['parser']
-                parser.add(0, data.encode('ascii'), aes_key, pkt[IP].src)
+                parser.add(packet_number, data.encode('ascii'), aes_key, pkt[IP].src)
                 # print(f"[SERVER] Decrypted message for {pkt[IP].src}")
 
         else:
@@ -292,12 +335,15 @@ def start_listener(domain, data_parsers):
               prn=lambda pkt: handle_query(pkt, domain, data_parsers),
               store=0,
               timeout=2)  # Add a timeout of 2 seconds to allow periodic checks
+        
+#========================================================== END OF SCAPY ===================================================================        
 
 
+#########################################################    MAIN CODE    ################################################################
 if __name__ == '__main__':
-    clients = {}  # Store clients' AES keys after decryption
+    clients = {}                        # Store clients' AES keys after decryption
     data_parsers = DataParserManager()
-    DOMAIN = 'sub.brightbuys.me'  # Example domain
+    DOMAIN = 'sub.brightbuys.me'        # Example domain
 
     print("Starting multi-threaded DNS server...")
     listener_thread = threading.Thread(target=start_listener, args=(DOMAIN, data_parsers))
@@ -316,7 +362,7 @@ if __name__ == '__main__':
 
     finally:
         print("Stopping the DNS server...")
-        stop_sniffing.set()  # Set the stop event for sniffing
+        stop_sniffing.set()     # Set the stop event for sniffing
         listener_thread.join()  # Wait for the sniffing thread to stop
         print("Thread stopped")
         data_parsers.save_parsers("./logs")
