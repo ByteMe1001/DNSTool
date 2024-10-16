@@ -1,9 +1,9 @@
 from enum import Enum
 import os
 import time
-from scapy.all import DNS, DNSQR, DNSRR, send, sniff, IP, UDP
+from scapy.all import DNSQR, sniff, IP
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Util.Padding import unpad
 import base64
 import threading
 
@@ -87,7 +87,7 @@ def decrypt_with_psk(encrypted_data, psk, ip, packet_number):
             missing_padding = len(complete_aes_key) % 4
             if missing_padding:
                 complete_aes_key += '=' * (4 - missing_padding)
-            data = base64.b64decode(complete_aes_key)   # Only decode when full frame is inside
+            data = base64.b64decode(complete_aes_key)    # Only decode when full frame is inside
             iv = data[:16]                               # First 16 bytes are IV
             encrypted_aes_key = data[16:]                # The rest is the encrypted AES key
             cipher = AES.new(psk, AES.MODE_CBC, iv)
@@ -215,9 +215,6 @@ class DataParserManager:
 
             packet_number = int(packet_number)
             connection_id = int(connection_id)
-            
-            print(f"Packet Number: {packet_number}, Connection ID: {connection_id}, Hex Data: {hex_data}")
-
 
             if connection_id > len(self.parsers):
                 raise NXConnectionException()
