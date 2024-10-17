@@ -198,9 +198,7 @@ def craft_dns_query(fragment, domain, query_type='TXT'):
 #########################################################    MAIN FUNCTION    ################################################################
 
 if __name__ == "__main__":
-    # Check if query type is provided, else default to TXT
     if len(sys.argv) < 2:
-        print("No query type provided. Using default 'TXT'.")
         query_type = 'TXT'  # Default query type
     else:
         query_type = sys.argv[1].upper()
