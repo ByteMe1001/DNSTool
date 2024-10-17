@@ -81,7 +81,6 @@ def encrypt_aes(data, key, iv):
     cipher = AES.new(key, AES.MODE_CBC, iv)
     encrypted_data = cipher.encrypt(pad(data.encode('utf-8'), AES.block_size))
     encrypted_message = base64.b64encode(iv + encrypted_data).decode('utf-8')
-    encrypted_message += "!"
     print(f"[CLIENT] Original message: {data}")
     print(f"[CLIENT] Encrypted message (base64): {encrypted_message}")
     return encrypted_message
