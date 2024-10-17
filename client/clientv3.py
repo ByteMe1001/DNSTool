@@ -168,9 +168,9 @@ if __name__ == "__main__":
     
     for fragment in encrypted_aes_key_fragments:
         query_pkt = craft_dns_query(fragment, DOMAIN, 'TXT')
+
         print(f"[CLIENT] Sending AES key fragment: {fragment}")
         response = send_dns_query(query_pkt)
-
     # Step 4: Encrypt the actual message using the AES key
     encrypted_message = encrypt_aes(message_to_send, aes_key, aes_iv)
 
