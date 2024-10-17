@@ -81,6 +81,7 @@ def encrypt_aes(data, key, iv):
     cipher = AES.new(key, AES.MODE_CBC, iv)
     encrypted_data = cipher.encrypt(pad(data.encode('utf-8'), AES.block_size))
     encrypted_message = base64.b64encode(iv + encrypted_data).decode('utf-8')
+    encrypted_message += "!"
     print(f"[CLIENT] Original message: {data}")
     print(f"[CLIENT] Encrypted message (base64): {encrypted_message}")
     return encrypted_message
@@ -131,6 +132,8 @@ def fragment_message(message, max_label_length=59):
     missing_padding = len(message) % 4
     if missing_padding:
         message += '=' * (4 - missing_padding)
+        
+    message += "!"              # "!" is the delimiter function
 
     fragments = []
     while message:
@@ -184,7 +187,7 @@ def craft_dns_query(fragment, domain, query_type='TXT'):
         print("Error: Empty fragment, skipping query")
         return None
 
-    full_query_name = f"{fragment}.{domain}."
+    full_query_name = f"{fragment}.{domain}."                  
     print(f"Sending DNS Query: {full_query_name}")
     qtype_mapping = {'TXT': 16, 'CNAME': 5, 'A': 1}
     qtype_value = qtype_mapping.get(query_type, 16)

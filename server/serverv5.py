@@ -81,8 +81,9 @@ def decrypt_with_psk(encrypted_data, psk, ip, packet_number):
 
     try:
         # Check if the key is complete (ends with ==)
-        if complete_aes_key.endswith("=="):
+        if complete_aes_key.endswith("!"):
             print(f"[SERVER] All fragments for {ip} received, attempting AES key decryption.")
+            complete_aes_key.rstrip("!")
             # Add base64 padding if necessary
             missing_padding = len(complete_aes_key) % 4
             if missing_padding:
@@ -128,8 +129,9 @@ def decrypt_aes(data, key, ip):
     
     # Check if full Base64 message is received
     try:
-        if complete_message.endswith("=") or complete_message.endswith("=="):
+        if complete_message.endswith("!"):
             print(f"[SERVER] Encrypted data (base64) for decryption: {complete_message}")
+            complete_message.rstrip("!")
             data = decode_base64_with_padding(complete_message)     # Use the padding fix function
             iv = data[:16]
             encrypted_message = data[16:]
